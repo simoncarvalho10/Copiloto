@@ -2,229 +2,403 @@
 <html lang="pt">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Copiloto de Entrevista</title>
+<meta name="theme-color" content="#f2f3ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111513" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Copiloto">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
-/* Layout: duas colunas — esquerda = perfil/CV/config, direita = ao vivo (transcrição + sugestão) */
+/* Layout: telemóvel = uma vista de cada vez + barra de separadores em baixo;
+   tablet horizontal/computador (≥ 900px) = Entrevista à esquerda, Perfil/Currículo/Ajustes à direita. */
 :root{
-  --bg:#f3f4f1; --panel:#ffffff; --ink:#1b2320; --muted:#5d6a64; --line:#d9ded9;
-  --accent:#1f7a5c; --accent-ink:#ffffff; --live:#c0392b; --pro:#2457a6; --pes:#8a5a12; --soft:#e8efeb;
-  --display:"Instrument Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  --bg:#f2f3ef; --panel:#ffffff; --ink:#18201c; --muted:#5a6660; --line:#d8ddd7; --soft:#e7ede9;
+  --accent:#1d7556; --accent-ink:#ffffff; --live:#c8392b; --pro:#2457a6; --pes:#8a5a12;
+  --font:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --ans-size:1.15rem; --nav-h:64px;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#121614; --panel:#1a201d; --ink:#e7ece9; --muted:#97a59e; --line:#2c3531;
-  --accent:#4cc79a; --accent-ink:#0d1411; --live:#ff6b5b; --pro:#7fa8ec; --pes:#e0b065; --soft:#212a26;
+  --bg:#111513; --panel:#1a1f1c; --ink:#e6ebe8; --muted:#95a39c; --line:#2b3430; --soft:#222a26;
+  --accent:#4cc79a; --accent-ink:#0b1310; --live:#ff6b5b; --pro:#86acec; --pes:#e2b46a;
   color-scheme:dark;}}
 *{box-sizing:border-box}
-html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--display);padding:20px max(16px,env(safe-area-inset-left)) 40px max(16px,env(safe-area-inset-right))}
-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;max-width:1280px;margin:0 auto 18px}
-h1{font-size:1.45rem;margin:0;letter-spacing:-.01em}
-h1 small{display:block;font-size:.8rem;font-weight:400;color:var(--muted)}
-h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;font-weight:600}
-.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px;max-width:1280px;margin:0 auto}
-@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
-.col{display:flex;flex-direction:column;gap:18px;min-width:0}
-section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
-label{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
-input[type=text],input[type=password],select,textarea{width:100%;font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
-textarea{resize:vertical;min-height:70px}
-input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-button{font:inherit;font-weight:600;font-size:.9rem;border-radius:6px;border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:8px 14px;cursor:pointer}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-button.rec{background:var(--live);color:#fff;border-color:var(--live)}
-button:disabled{opacity:.5;cursor:not-allowed}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.drop{border:1.5px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:.85rem;cursor:pointer}
-.drop.ok{border-color:var(--accent);color:var(--ink)}
-.status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--line)}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--font);-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+
+/* ---------- Barra de topo ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+  padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));
+  display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:700;font-size:1.05rem;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand svg{width:22px;height:22px;color:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.75rem;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:var(--panel);white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--line);flex:none}
 .dot.on{background:var(--live);animation:pulse 1.2s infinite}
 .dot.ok{background:var(--accent)} .dot.bad{background:var(--live)}
-@keyframes pulse{50%{opacity:.35}}
+@keyframes pulse{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){.dot.on{animation:none}}
-.meter{height:4px;background:var(--line);border-radius:2px;overflow:hidden;flex:1;min-width:80px}
+
+/* ---------- Estrutura ---------- */
+.app{padding:16px max(16px,env(safe-area-inset-right)) calc(var(--nav-h) + 110px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  max-width:760px;margin:0 auto}
+.view{display:none;flex-direction:column;gap:14px;min-width:0}
+.view.active{display:flex}
+h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;font-weight:600}
+.view>h1{font-size:1.35rem;margin:4px 0 0;letter-spacing:-.01em;text-wrap:balance}
+.lead{color:var(--muted);margin:-6px 0 2px;font-size:.92rem}
+section.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+
+/* ---------- Formulários ---------- */
+label{display:block;font-size:.85rem;font-weight:500;color:var(--muted);margin:14px 0 6px}
+section.panel>label:first-child,section.panel>h2+label{margin-top:0}
+#current #welcome{white-space:normal}
+input[type=text],input[type=password],select,textarea{width:100%;font-size:16px;background:var(--bg);border:1px solid var(--line);
+  border-radius:10px;padding:11px 12px;min-height:46px}
+textarea{resize:vertical;min-height:88px;line-height:1.45}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,.drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--accent);height:32px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:.9rem;margin-top:14px;color:var(--ink);font-weight:400}
+.check input{width:20px;height:20px;margin:1px 0 0;accent-color:var(--accent);flex:none}
+.hint{font-size:.82rem;color:var(--muted);margin:8px 0 0}
+.mono{font-family:var(--mono);font-size:.8rem}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+button{border-radius:10px;border:1px solid var(--line);background:var(--soft);padding:10px 16px;min-height:44px;font-weight:600;font-size:.92rem;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px 14px;text-align:center;color:var(--muted);cursor:pointer;background:var(--bg)}
+.drop strong{display:block;color:var(--ink);font-size:1rem;margin-bottom:4px}
+.drop.ok{border-style:solid;border-color:var(--accent);color:var(--ink)}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;flex:1;min-width:60px}
 .meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .08s}
-#transcript{font-size:1rem;min-height:120px;max-height:260px;overflow:auto;white-space:pre-wrap}
+#micHint{white-space:pre-line;color:var(--ink);font-size:.85rem}
+
+/* ---------- Entrevista ---------- */
+.notice{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--soft);border-radius:12px;padding:12px 14px;font-size:.9rem}
+.ready{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.ready li{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.92rem;padding:10px 12px;background:var(--bg);border-radius:10px}
+.ready li button{min-height:34px;padding:6px 12px;font-size:.82rem}
+.ready .st{font-family:var(--mono);font-size:.75rem;color:var(--muted)}
+.ready li.ok .st{color:var(--accent)}
+
+#current .banner{background:var(--soft);border-radius:12px;padding:14px;font-size:.95rem;white-space:pre-wrap}
+.card{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--panel)}
+.card.current{border:2px solid var(--accent)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.tag{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:6px;border:1px solid currentColor}
+.tag.pro{color:var(--pro)} .tag.pes{color:var(--pes)} .tag.lang{color:var(--muted)}
+.q{font-weight:600;color:var(--muted);margin-bottom:10px;font-size:.95rem}
+.ans{white-space:pre-wrap;font-size:var(--ans-size);line-height:1.55}
+.ans strong{color:var(--accent)}
+#history{display:flex;flex-direction:column;gap:10px}
+#history .card{padding:12px 14px}
+#history .ans{font-size:.95rem;color:var(--muted)}
+.sizebtns{display:flex;gap:6px}
+.sizebtns button{min-height:34px;padding:4px 10px;font-size:.85rem}
+.headrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.headrow h2{margin:0}
+
+#transcript{font-size:.95rem;max-height:7.5em;overflow:auto;white-space:pre-wrap;overscroll-behavior:contain}
 #transcript .done{color:var(--muted)}
 #transcript .interim{color:var(--muted);font-style:italic}
-.card{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--panel)}
-.card.current{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.q{font-weight:600;margin-bottom:8px}
-.tag{display:inline-block;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-right:6px;border:1px solid currentColor}
-.tag.pro{color:var(--pro)} .tag.pes{color:var(--pes)} .tag.lang{color:var(--muted)}
-.ans{white-space:pre-wrap;font-size:1.02rem}
-.ans strong{color:var(--accent)}
-#history{display:flex;flex-direction:column;gap:12px}
-.hint{font-size:.8rem;color:var(--muted)}
-#micHint{white-space:pre-line;color:var(--ink)}
-.check{display:flex;gap:8px;align-items:flex-start;font-size:.85rem;margin-top:10px;color:var(--ink)}
-.check input{margin-top:3px}
-.banner{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:.85rem}
-details summary{cursor:pointer;font-weight:600;font-size:.9rem}
-.mono{font-family:var(--mono);font-size:.78rem}
+details.test summary{cursor:pointer;font-weight:600;font-size:.9rem;padding:4px 0;color:var(--muted)}
+details.test .row{margin-top:10px}
+
+/* ---------- Barra de ação (ouvir) ---------- */
+.actionbar{position:fixed;left:0;right:0;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));z-index:15;
+  background:var(--panel);border-top:1px solid var(--line);
+  padding:10px max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left))}
+.actionbar .inner{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:10px}
+#btnStart{display:flex;align-items:center;justify-content:center;gap:10px;flex:1;min-height:56px;border-radius:16px;font-size:1.02rem;
+  background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#btnStart svg{width:22px;height:22px}
+#btnStart.rec{background:var(--live);border-color:var(--live);color:#fff}
+.actionbar .side{display:flex;flex-direction:column;gap:6px}
+.actionbar .side button{min-height:25px;padding:3px 12px;font-size:.8rem;border-radius:8px}
+.actionbar .meter{position:absolute;left:0;right:0;top:-1px;height:3px;border-radius:0}
+.app-hidden-live .actionbar{display:none}
+
+/* ---------- Separadores ---------- */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:16;background:var(--panel);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(4,1fr);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+nav.tabs button{background:none;border:0;border-radius:0;min-height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-size:.72rem;font-weight:600;color:var(--muted);padding:6px 2px;position:relative}
+nav.tabs svg{width:22px;height:22px}
+nav.tabs button[aria-selected=true]{color:var(--accent)}
+nav.tabs button[aria-selected=true]::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
+nav.tabs .badge{position:absolute;top:10px;right:calc(50% - 18px);width:8px;height:8px;border-radius:50%;background:var(--live)}
+svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- Tablet horizontal / computador ---------- */
+@media (min-width:900px){
+  :root{--nav-h:0px}
+  .app{max-width:1280px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto 1fr;
+    column-gap:22px;row-gap:12px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
+  #v-live{display:flex;grid-column:1;grid-row:1 / span 2}
+  nav.tabs{position:sticky;top:76px;grid-column:2;grid-row:1;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;padding:4px;z-index:5}
+  nav.tabs button{min-height:44px;flex-direction:row;font-size:.85rem;border-radius:8px}
+  nav.tabs button[aria-selected=true]{background:var(--soft)}
+  nav.tabs button[aria-selected=true]::before{display:none}
+  nav.tabs [data-go=live]{display:none}
+  .view.side{display:flex;grid-column:2;grid-row:2}
+  .view:not(#v-live):not(.side){display:none}
+  .actionbar{bottom:0;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .actionbar .inner{max-width:1280px}
+  #btnStart{flex:0 1 360px}
+  #transcript{max-height:12em}
+}
+@media (min-width:600px) and (max-width:899px){
+  .app{max-width:720px}
+  :root{--ans-size:1.25rem}
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>Copiloto de Entrevista<small>Transcrição ao vivo (PT/EN) e respostas sugeridas com base no seu perfil e currículo</small></h1>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Parado</span></div>
+
+<header class="topbar">
+  <div class="brand"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Copiloto de Entrevista</div>
+  <span class="chip"><span class="dot" id="dot"></span><span id="statusTxt">Parado</span></span>
 </header>
 
-<div class="grid">
-<div class="col">
-  <section id="micSec">
-    <h2>Microfone</h2>
-    <div class="row" style="justify-content:space-between">
-      <div class="status"><span class="dot" id="micDot"></span><span id="micState">A verificar permissão…</span></div>
-      <button class="primary" id="btnMic">Permitir microfone</button>
-    </div>
-    <label for="micSel">Dispositivo de entrada</label>
-    <select id="micSel"><option value="">Padrão do sistema</option></select>
-    <div class="row" style="margin-top:10px">
-      <button id="btnTest">Testar microfone</button>
-      <div class="meter" title="Nível do teste"><i id="testLevel"></i></div>
-    </div>
-    <p class="hint" id="micHint"></p>
-  </section>
+<main class="app" id="app">
 
-  <section>
-    <h2>1 · Currículo</h2>
-    <div class="drop" id="drop" tabindex="0">Arraste o currículo aqui ou clique para escolher<br><span class="mono">PDF · DOCX · TXT</span></div>
-    <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md" hidden>
-    <details style="margin-top:10px"><summary>Ver / editar texto do currículo</summary>
-      <textarea id="cvText" rows="8" placeholder="O texto extraído do currículo aparece aqui. Pode também colar diretamente."></textarea>
-    </details>
-  </section>
+  <nav class="tabs" role="tablist" aria-label="Secções">
+    <button data-go="live" role="tab" aria-selected="true"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Entrevista</button>
+    <button data-go="perfil" role="tab" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Perfil</button>
+    <button data-go="cv" role="tab" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>Currículo</button>
+    <button data-go="ajustes" role="tab" aria-selected="false"><span class="badge" id="setBadge" hidden></span><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>Ajustes</button>
+  </nav>
 
-  <section>
-    <h2>2 · Perfil pessoal</h2>
-    <label for="pName">Nome</label><input type="text" id="pName">
-    <label for="pAbout">Sobre mim (personalidade, valores, motivações)</label>
-    <textarea id="pAbout" placeholder="Ex.: Sou organizado, gosto de resolver problemas complexos, valorizo trabalho em equipa..."></textarea>
-    <label for="pGoals">Objetivos de carreira</label><textarea id="pGoals"></textarea>
-    <label for="pStrengths">Pontos fortes / a melhorar</label><textarea id="pStrengths"></textarea>
-    <label for="pPersonal">Vida pessoal (hobbies, onde vive, família — só o que quiser partilhar)</label><textarea id="pPersonal"></textarea>
-    <label for="pPractical">Questões práticas (pretensão salarial, disponibilidade, mobilidade)</label><textarea id="pPractical"></textarea>
-    <label for="pJob">Vaga / empresa (descrição da oferta)</label><textarea id="pJob" placeholder="Cole a descrição da vaga para respostas mais alinhadas."></textarea>
-    <div class="row" style="margin-top:14px;justify-content:space-between">
-      <span class="status"><span class="dot ok" id="saveDot"></span><span id="saveState">Guardado automaticamente</span></span>
-      <div class="row">
-        <button id="btnExport" title="Descarregar uma cópia de segurança do perfil">Exportar</button>
-        <button id="btnImport" title="Carregar uma cópia de segurança">Importar</button>
-        <button id="btnWipe">Apagar dados</button>
+  <!-- ===== ENTREVISTA ===== -->
+  <div class="view active" id="v-live" role="tabpanel">
+    <div class="notice" id="micNotice" hidden>
+      <span id="micNoticeTxt">O microfone ainda não está autorizado.</span>
+      <button class="primary" id="btnMic2">Permitir microfone</button>
+    </div>
+
+    <section class="panel">
+      <div class="headrow">
+        <h2>Resposta sugerida</h2>
+        <div class="sizebtns" aria-label="Tamanho do texto">
+          <button class="ghost" id="fontDown" aria-label="Diminuir letra">A−</button>
+          <button class="ghost" id="fontUp" aria-label="Aumentar letra">A+</button>
+        </div>
       </div>
-    </div>
-    <input type="file" id="importFile" accept=".json" hidden>
-  </section>
-
-  <section>
-    <h2>3 · Configuração</h2>
-    <label for="engine">Motor de transcrição</label>
-    <select id="engine">
-      <option value="browser">Navegador (grátis, Chrome/Edge)</option>
-      <option value="whisper-groq">Whisper — Groq (grátis, deteta idioma e sotaque)</option>
-      <option value="whisper-openai">Whisper — OpenAI (pago)</option>
-    </select>
-    <div id="langBox">
-      <label for="lang">Idioma / sotaque esperado</label>
-      <select id="lang">
-        <option value="pt-BR">Português (Brasil)</option>
-        <option value="pt-PT">Português (Portugal)</option>
-        <option value="en-US">English (US)</option>
-        <option value="en-GB">English (UK)</option>
-        <option value="en-IN">English (India)</option>
-        <option value="en-AU">English (Australia)</option>
-      </select>
-      <p class="hint">No modo Navegador, escolha um idioma. Pode trocar durante a entrevista. Para mistura de idiomas e sotaques variados, use o Whisper.</p>
-    </div>
-    <label for="provider">Quem gera as respostas</label>
-    <select id="provider">
-      <option value="groq" selected>Groq (grátis, sem cartão)</option>
-      <option value="anthropic">Claude — Anthropic (pago, respostas mais elaboradas)</option>
-    </select>
-    <div id="groqBox">
-      <label for="groqKey">Chave API Groq</label><input type="password" id="groqKey" placeholder="gsk_...">
-      <p class="hint">Crie grátis em console.groq.com → API Keys. A mesma chave serve para as respostas e para o Whisper — Groq.</p>
-    </div>
-    <div id="groqModelBox">
-      <label for="groqModel">Modelo (Groq)</label>
-      <select id="groqModel">
-        <option value="meta-llama/llama-4-scout-17b-16e-instruct" selected>Llama 4 Scout (rápido, aceita currículos longos)</option>
-        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (bom em português)</option>
-        <option value="openai/gpt-oss-120b">GPT-OSS 120B (mais elaborado)</option>
-      </select>
-    </div>
-    <div id="openaiBox" hidden>
-      <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-...">
-    </div>
-    <div id="claudeBox" hidden>
-      <label for="claudeKey">Chave API Anthropic (Claude)</label>
-      <input type="password" id="claudeKey" placeholder="sk-ant-...">
-      <label for="model">Modelo (Claude)</label>
-      <select id="model">
-        <option value="claude-haiku-5-5">Claude Haiku 5.5 (mais rápido)</option>
-        <option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5 (equilibrado)</option>
-        <option value="claude-opus-5-5">Claude Opus 5.5 (mais elaborado)</option>
-      </select>
-    </div>
-    <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,6 s</span></label>
-    <input type="range" id="pause" min="0.8" max="4" step="0.1" value="1.6" style="width:100%">
-    <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo (retome com o botão ou a tecla Espaço)</label>
-    <label class="check"><input type="checkbox" id="saveKeys" checked> Guardar também as chaves API neste navegador</label>
-    <p class="hint">O perfil, o currículo e as preferências são guardados automaticamente enquanto escreve. As chaves ficam apenas neste computador e só são enviadas para a OpenAI/Anthropic.</p>
-  </section>
-</div>
-
-<div class="col">
-  <section>
-    <div class="row" style="justify-content:space-between;margin-bottom:12px">
-      <div class="row">
-        <button class="primary" id="btnStart">● Iniciar escuta</button>
-        <button id="btnResume" disabled>Retomar deteção</button>
-        <button id="btnNow">Sugerir agora</button>
-        <button id="btnClear">Limpar</button>
+      <div id="current">
+        <div class="banner" id="welcome">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui, no idioma da pergunta.
+          <ul class="ready" id="ready">
+            <li id="rdMic"><span>Microfone</span><span class="st">a verificar…</span></li>
+            <li id="rdKey"><span>Chave para gerar respostas</span><span class="st">em falta</span></li>
+            <li id="rdCv"><span>Currículo</span><span class="st">em falta</span></li>
+            <li id="rdPerfil"><span>Perfil pessoal</span><span class="st">em falta</span></li>
+          </ul>
+        </div>
       </div>
-      <div class="meter" title="Nível do microfone"><i id="level"></i></div>
-    </div>
-    <h2>Transcrição</h2>
-    <div id="transcript" aria-live="polite"><span class="hint">A transcrição aparece aqui quando iniciar a escuta.</span></div>
-    <div class="row" style="margin-top:10px">
-      <input type="text" id="manualQ" placeholder="Ou escreva/cole uma pergunta para testar…" style="flex:1;min-width:0">
-      <button id="btnAsk">Perguntar</button>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <h2>Resposta sugerida</h2>
-    <div id="current" class="banner">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui — no idioma da pergunta.</div>
-  </section>
+    <section class="panel">
+      <div class="headrow">
+        <h2>Transcrição</h2>
+        <button class="ghost" id="btnClear" style="min-height:34px;padding:4px 12px;font-size:.82rem">Limpar</button>
+      </div>
+      <div id="transcript" aria-live="polite"><span class="hint">Toque em "Começar a ouvir" e deixe o entrevistador falar.</span></div>
+      <details class="test">
+        <summary>Testar escrevendo uma pergunta</summary>
+        <div class="row">
+          <input type="text" id="manualQ" placeholder="Ex.: Fale-me de um projeto difícil" style="flex:1;min-width:0">
+          <button id="btnAsk">Perguntar</button>
+        </div>
+      </details>
+    </section>
 
-  <section>
-    <h2>Histórico da entrevista</h2>
-    <div id="history"><span class="hint">Sem perguntas ainda.</span></div>
-  </section>
-</div>
+    <section class="panel">
+      <h2>Histórico</h2>
+      <div id="history"><span class="hint">Sem perguntas ainda.</span></div>
+    </section>
+  </div>
+
+  <!-- ===== PERFIL ===== -->
+  <div class="view" id="v-perfil" role="tabpanel">
+    <h1>Perfil pessoal</h1>
+    <p class="lead">Usado nas perguntas pessoais. Tudo fica guardado só neste aparelho.</p>
+    <section class="panel">
+      <label for="pName">Nome</label><input type="text" id="pName" autocomplete="name">
+      <label for="pAbout">Sobre mim (personalidade, valores, motivações)</label>
+      <textarea id="pAbout" placeholder="Ex.: Sou organizado, gosto de resolver problemas complexos, valorizo trabalho em equipa…"></textarea>
+      <label for="pGoals">Objetivos de carreira</label><textarea id="pGoals" placeholder="Ex.: Crescer para uma função de liderança técnica nos próximos 3 anos."></textarea>
+      <label for="pStrengths">Pontos fortes e a melhorar</label><textarea id="pStrengths" placeholder="Fortes: comunicação, análise de dados. A melhorar: delegar tarefas."></textarea>
+      <label for="pPersonal">Vida pessoal (hobbies, onde vive — só o que quiser partilhar)</label><textarea id="pPersonal"></textarea>
+      <label for="pPractical">Questões práticas (pretensão salarial, disponibilidade, mobilidade)</label><textarea id="pPractical"></textarea>
+    </section>
+    <section class="panel">
+      <h2>Vaga</h2>
+      <label for="pJob">Descrição da vaga e da empresa</label>
+      <textarea id="pJob" rows="5" placeholder="Cole a descrição da oferta para respostas mais alinhadas."></textarea>
+    </section>
+    <section class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="chip"><span class="dot ok" id="saveDot"></span><span id="saveState">Guardado automaticamente</span></span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btnExport">Exportar cópia</button>
+        <button id="btnImport">Importar cópia</button>
+        <button class="ghost" id="btnWipe">Apagar dados</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <p class="hint">A cópia (.json) serve para passar o perfil para outro aparelho. Nunca inclui as chaves API.</p>
+    </section>
+  </div>
+
+  <!-- ===== CURRÍCULO ===== -->
+  <div class="view" id="v-cv" role="tabpanel">
+    <h1>Currículo</h1>
+    <p class="lead">Base de todas as respostas às perguntas profissionais.</p>
+    <section class="panel">
+      <div class="drop" id="drop" tabindex="0" role="button"><strong>Escolher ficheiro do currículo</strong>PDF, DOCX ou TXT</div>
+      <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden>
+      <label for="cvText" style="margin-top:16px">Texto do currículo (pode editar ou colar diretamente)</label>
+      <textarea id="cvText" rows="14" placeholder="O texto extraído do currículo aparece aqui."></textarea>
+    </section>
+  </div>
+
+  <!-- ===== AJUSTES ===== -->
+  <div class="view" id="v-ajustes" role="tabpanel">
+    <h1>Ajustes</h1>
+    <section class="panel" id="micSec">
+      <h2>Microfone</h2>
+      <div class="row" style="justify-content:space-between">
+        <span class="chip"><span class="dot" id="micDot"></span><span id="micState">A verificar permissão…</span></span>
+        <button class="primary" id="btnMic">Permitir microfone</button>
+      </div>
+      <label for="micSel" style="margin-top:14px">Dispositivo de entrada</label>
+      <select id="micSel"><option value="">Padrão do sistema</option></select>
+      <div class="row" style="margin-top:12px">
+        <button id="btnTest">Testar microfone</button>
+        <div class="meter" title="Nível do teste"><i id="testLevel"></i></div>
+      </div>
+      <p class="hint" id="micHint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Respostas</h2>
+      <label for="provider">Quem gera as respostas</label>
+      <select id="provider">
+        <option value="groq" selected>Groq (grátis, sem cartão)</option>
+        <option value="anthropic">Claude — Anthropic (pago, mais elaborado)</option>
+      </select>
+      <div id="groqBox">
+        <label for="groqKey">Chave API Groq</label><input type="password" id="groqKey" placeholder="gsk_..." autocomplete="off">
+        <p class="hint">Crie grátis em console.groq.com → API Keys. A mesma chave serve também para o Whisper — Groq.</p>
+      </div>
+      <div id="groqModelBox">
+        <label for="groqModel">Modelo (Groq)</label>
+        <select id="groqModel">
+          <option value="llama-3.3-70b-versatile" selected>Llama 3.3 70B (recomendado, bom em português)</option>
+          <option value="openai/gpt-oss-120b">GPT-OSS 120B (mais elaborado)</option>
+          <option value="openai/gpt-oss-20b">GPT-OSS 20B (rápido)</option>
+          <option value="llama-3.1-8b-instant">Llama 3.1 8B (o mais rápido, mais limite grátis)</option>
+        </select>
+      </div>
+      <div id="claudeBox" hidden>
+        <label for="claudeKey">Chave API Anthropic</label><input type="password" id="claudeKey" placeholder="sk-ant-..." autocomplete="off">
+        <label for="model">Modelo (Claude)</label>
+        <select id="model">
+          <option value="claude-haiku-5-5">Claude Haiku 5.5 (mais rápido)</option>
+          <option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5 (equilibrado)</option>
+          <option value="claude-opus-5-5">Claude Opus 5.5 (mais elaborado)</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Transcrição</h2>
+      <label for="engine">Motor de transcrição</label>
+      <select id="engine">
+        <option value="browser">Navegador (grátis, sem chave)</option>
+        <option value="whisper-groq">Whisper — Groq (grátis, deteta idioma e sotaque)</option>
+        <option value="whisper-openai">Whisper — OpenAI (pago)</option>
+      </select>
+      <div id="langBox">
+        <label for="lang">Idioma e sotaque esperado</label>
+        <select id="lang">
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="pt-PT">Português (Portugal)</option>
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="en-IN">English (India)</option>
+          <option value="en-AU">English (Australia)</option>
+        </select>
+        <p class="hint">O motor Navegador ouve um idioma de cada vez. Para misturar PT e EN, use o Whisper.</p>
+      </div>
+      <div id="openaiBox" hidden>
+        <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off">
+      </div>
+      <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,6 s</span></label>
+      <input type="range" id="pause" min="0.8" max="4" step="0.1" value="1.6">
+      <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo</label>
+      <label class="check"><input type="checkbox" id="saveKeys" checked> Guardar as chaves API neste aparelho</label>
+      <label class="check"><input type="checkbox" id="wake" checked> Manter o ecrã ligado durante a escuta</label>
+    </section>
+  </div>
+</main>
+
+<div class="actionbar" id="actionbar">
+  <div class="meter"><i id="level"></i></div>
+  <div class="inner">
+    <button id="btnStart"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span id="startLbl">Começar a ouvir</span></button>
+    <div class="side">
+      <button id="btnNow">Sugerir agora</button>
+      <button id="btnResume" disabled>Retomar deteção</button>
+    </div>
+  </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const IS_MOBILE=IS_ANDROID||/iPhone|iPad|iPod/i.test(navigator.userAgent);
-/* ---------- Gravação automática do formulário ---------- */
+
+/* ---------- Navegação ---------- */
+let view='live', side='perfil';
+function go(v){
+  view=v; if(v!=='live') side=v;
+  document.querySelectorAll('.view').forEach(el=>{
+    const id=el.id.slice(2);
+    el.classList.toggle('active',id===view);
+    el.classList.toggle('side',id===side && id!=='live');
+  });
+  document.querySelectorAll('nav.tabs button').forEach(b=>{
+    const wide=matchMedia('(min-width:900px)').matches;
+    b.setAttribute('aria-selected', String(b.dataset.go===(wide?side:view)));
+  });
+  document.body.classList.toggle('app-hidden-live', view!=='live' && !matchMedia('(min-width:900px)').matches);
+  if(!matchMedia('(min-width:900px)').matches) window.scrollTo({top:0});
+  try{ sessionStorage.setItem('copiloto-view',v); }catch(e){}
+}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.go));
+matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
+
+/* ---------- Gravação automática ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
 const FIELDS = ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','provider','groqModel','model','pause','micSel'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
-const CHECKS = ['holdAfter','saveKeys'];
-let saveTimer=null, pendingMic='';
+const CHECKS = ['holdAfter','saveKeys','wake'];
+let saveTimer=null, pendingMic='', ansSize=1.15;
 const store = {
   collect(withKeys){
-    const d={savedAt:new Date().toISOString()};
+    const d={savedAt:new Date().toISOString(), ansSize};
     FIELDS.forEach(f=>d[f]=$(f).value);
     CHECKS.forEach(f=>d[f]=$(f).checked);
     if(withKeys) SECRET.forEach(f=>d[f]=$(f).value);
@@ -234,8 +408,9 @@ const store = {
     FIELDS.forEach(f=>{ if(d[f]!=null) $(f).value=d[f]; });
     CHECKS.forEach(f=>{ if(typeof d[f]==='boolean') $(f).checked=d[f]; });
     SECRET.forEach(f=>{ if(d[f]) $(f).value=d[f]; });
+    if(d.ansSize) setAnsSize(d.ansSize);
     pendingMic=d.micSel||'';
-    if(d.cvText){ $('drop').classList.add('ok'); $('drop').textContent='Currículo carregado ✓ (clique para trocar)'; }
+    cvDropState();
   },
   load(){
     try{ const raw=localStorage.getItem(STORE_KEY)||localStorage.getItem('copiloto');
@@ -245,97 +420,125 @@ const store = {
   save(){
     try{ localStorage.setItem(STORE_KEY,JSON.stringify(this.collect($('saveKeys').checked))); localStorage.removeItem('copiloto'); this.mark(true); }
     catch(e){ this.mark(false); }
+    readiness();
   },
   mark(ok,when){
     $('saveDot').className='dot '+(ok?'ok':'bad');
-    if(!ok){ $('saveState').textContent='Não foi possível guardar neste navegador — use Exportar'; return; }
+    if(!ok){ $('saveState').textContent='Não foi possível guardar — use Exportar'; return; }
     const t=when?new Date(when):new Date();
-    $('saveState').textContent='Guardado às '+t.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    $('saveState').textContent='Guardado às '+t.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
   },
   soon(){ $('saveState').textContent='A guardar…'; clearTimeout(saveTimer); saveTimer=setTimeout(()=>this.save(),400); }
 };
+function setAnsSize(s){ ansSize=Math.max(.9,Math.min(2,s)); document.documentElement.style.setProperty('--ans-size',ansSize+'rem'); }
+$('fontUp').onclick=()=>{ setAnsSize(ansSize+.1); store.save(); };
+$('fontDown').onclick=()=>{ setAnsSize(ansSize-.1); store.save(); };
+function cvDropState(){
+  const has=$('cvText').value.trim().length>30;
+  $('drop').classList.toggle('ok',has);
+  $('drop').innerHTML=has?'<strong>Currículo carregado ✓</strong>Toque para trocar de ficheiro':'<strong>Escolher ficheiro do currículo</strong>PDF, DOCX ou TXT';
+}
 [...FIELDS,...SECRET,...CHECKS].forEach(f=>{ $(f).addEventListener('input',()=>store.soon()); $(f).addEventListener('change',()=>store.save()); });
-window.addEventListener('beforeunload',()=>store.save());
+$('cvText').addEventListener('input',cvDropState);
+window.addEventListener('pagehide',()=>store.save());
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) store.save(); });
 store.load();
 
 $('btnExport').onclick=()=>{
-  const d=store.collect(false); // a cópia de segurança nunca inclui as chaves
+  const d=store.collect(false);
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));
   a.download='perfil-entrevista-'+new Date().toISOString().slice(0,10)+'.json';
-  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1500);
 };
 $('btnImport').onclick=()=>$('importFile').click();
 $('importFile').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
-  try{ store.apply(JSON.parse(await f.text())); store.save(); syncEngine(); fmtPause(); selectMic(); }
-  catch(err){ alertBanner('Ficheiro inválido: '+err.message); }
+  try{ store.apply(JSON.parse(await f.text())); store.save(); syncEngine(); fmtPause(); selectMic(); $('saveState').textContent='Cópia importada ✓'; }
+  catch(err){ $('saveState').textContent='Ficheiro inválido'; }
   e.target.value='';
 };
 let wipeArmed=false;
 $('btnWipe').onclick=()=>{
-  if(!wipeArmed){ wipeArmed=true; $('btnWipe').textContent='Confirmar apagar?'; setTimeout(()=>{wipeArmed=false;$('btnWipe').textContent='Apagar dados';},4000); return; }
+  if(!wipeArmed){ wipeArmed=true; $('btnWipe').textContent='Tocar de novo para apagar'; setTimeout(()=>{wipeArmed=false;$('btnWipe').textContent='Apagar dados';},4000); return; }
   try{ localStorage.removeItem(STORE_KEY); localStorage.removeItem('copiloto'); }catch(e){}
-  [...FIELDS.filter(f=>!['engine','lang','model','pause','micSel'].includes(f)),...SECRET].forEach(f=>$(f).value='');
-  $('drop').classList.remove('ok'); $('drop').innerHTML='Arraste o currículo aqui ou clique para escolher<br><span class="mono">PDF · DOCX · TXT</span>';
-  wipeArmed=false; $('btnWipe').textContent='Apagar dados'; $('saveState').textContent='Dados apagados';
+  ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob',...SECRET].forEach(f=>$(f).value='');
+  cvDropState(); wipeArmed=false; $('btnWipe').textContent='Apagar dados'; $('saveState').textContent='Dados apagados'; readiness();
 };
 
-/* ---------- Permissão do microfone ---------- */
+/* ---------- Estado de preparação ---------- */
+function setReady(id,ok,txt,action){
+  const li=$(id); li.classList.toggle('ok',ok);
+  li.querySelector('.st')?.remove(); li.querySelector('button')?.remove();
+  if(!ok && action){ const b=document.createElement('button'); b.textContent=action[0]; b.onclick=action[1]; li.appendChild(b); }
+  else { const s=document.createElement('span'); s.className='st'; s.textContent=txt; li.appendChild(s); }
+}
+function readiness(){
+  if(!$('rdMic')) return;
+  const prov=$('provider').value, key=(prov==='groq'?$('groqKey'):$('claudeKey')).value.trim();
+  const eng=$('engine').value;
+  const engKey= eng==='whisper-groq'?$('groqKey').value.trim(): eng==='whisper-openai'?$('openaiKey').value.trim():'ok';
+  const keysOk=!!key && !!engKey;
+  setReady('rdMic',micPermission==='granted','pronto ✓',['Permitir',requestMic]);
+  setReady('rdKey',keysOk,'pronto ✓',['Configurar',()=>go('ajustes')]);
+  setReady('rdCv',$('cvText').value.trim().length>30,'carregado ✓',['Carregar',()=>go('cv')]);
+  setReady('rdPerfil',!!($('pAbout').value.trim()||$('pGoals').value.trim()),'preenchido ✓',['Preencher',()=>go('perfil')]);
+  $('setBadge').hidden = keysOk && micPermission==='granted';
+}
+
+/* ---------- Microfone ---------- */
 let micPermission='prompt';
 function micUI(state,msg){
   micPermission=state;
-  const map={granted:['ok','Microfone autorizado','Microfone autorizado ✓'],denied:['bad','Acesso ao microfone bloqueado','Permitir microfone'],prompt:['','Permissão ainda não concedida','Permitir microfone'],unsupported:['bad','Este navegador não dá acesso ao microfone','Permitir microfone']};
+  const map={granted:['ok','Microfone autorizado','Autorizado ✓'],denied:['bad','Microfone bloqueado','Permitir microfone'],prompt:['','Ainda não autorizado','Permitir microfone'],unsupported:['bad','Microfone indisponível aqui','Permitir microfone']};
   const [cls,txt,btn]=map[state]||map.prompt;
   $('micDot').className='dot '+cls; $('micState').textContent=txt; $('btnMic').textContent=btn;
   $('btnMic').className=state==='granted'?'':'primary';
   const hints={
-    denied:'O navegador bloqueou o microfone. Clique no ícone de cadeado (ou de câmara) à esquerda do endereço, escolha Microfone → Permitir e recarregue a página. No Windows/macOS confirme também que o navegador tem acesso ao microfone nas definições de privacidade do sistema.',
-    prompt:'Clique em "Permitir microfone" e aceite o pedido do navegador.',
-    granted:location.protocol==='file:'?'Dica: aberta como ficheiro, o navegador pode voltar a pedir a permissão a cada vez. Abra pelo atalho "abrir-copiloto" (endereço http://localhost:8765) para a permissão ficar memorizada.':'Tudo pronto. A permissão fica memorizada para este endereço.',
+    denied:IS_ANDROID?'O Chrome bloqueou o microfone para este site. Toque no ícone à esquerda do endereço → Permissões → Microfone → Permitir, e recarregue. Confirme também em Definições do Android → Aplicações → Chrome → Permissões → Microfone.':'Clique no ícone à esquerda do endereço → Microfone → Permitir, e recarregue a página.',
+    prompt:'Toque em "Permitir microfone" e aceite o pedido do navegador.',
+    granted:'Tudo pronto. A permissão fica memorizada para este endereço.',
     unsupported:'Use o Chrome ou o Edge numa versão recente.'
   };
   $('micHint').textContent=msg||hints[state]||'';
+  $('micNotice').hidden = state==='granted';
+  $('micNoticeTxt').textContent = state==='denied'?'O microfone está bloqueado. Veja como desbloquear em Ajustes.': state==='unsupported'?'O microfone não está disponível nesta página — veja Ajustes.':'Para ouvir a entrevista, autorize o microfone.';
+  $('btnMic2').textContent = state==='denied'||state==='unsupported'?'Ver como resolver':'Permitir microfone';
+  readiness();
 }
+$('btnMic2').onclick=async()=>{ if(micPermission==='denied'||micPermission==='unsupported'){ go('ajustes'); $('micSec').scrollIntoView({block:'start'}); } else await requestMic(); };
+function micEnvironmentProblem(){
+  let inFrame=false; try{ inFrame=window.self!==window.top; }catch(e){ inFrame=true; }
+  const pol=document.permissionsPolicy||document.featurePolicy;
+  if(inFrame||(pol&&pol.allowsFeature&&!pol.allowsFeature('microphone'))) return 'A página está dentro de uma pré-visualização (por exemplo, no app do Claude), que não permite o microfone. Abra o endereço do site diretamente no Chrome.';
+  if(IS_ANDROID && location.protocol!=='https:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname))
+    return 'No Android, o microfone só funciona quando a página é aberta por um endereço https:// (por exemplo, https://utilizador.github.io/Copiloto/), não como ficheiro.';
+  if(!window.isSecureContext) return 'O navegador só permite o microfone em endereços https:// ou localhost.';
+  if(!navigator.mediaDevices?.getUserMedia) return 'Este navegador não dá acesso ao microfone. Use o Chrome ou o Edge numa versão recente.';
+  return '';
+}
+const RESET_HELP=IS_ANDROID
+ ?'O Chrome já não mostra o pedido porque o microfone foi bloqueado para este site. Para desbloquear:\n1) Toque no ícone à esquerda do endereço → Permissões (ou Definições do site) → Microfone → Permitir.\n2) Ou: menu ⋮ → Definições → Definições de sites → Microfone → retire este site de "Bloqueado".\n3) Confirme em Definições do Android → Aplicações → Chrome → Permissões → Microfone → Permitir.\n4) Recarregue a página e toque em "Permitir microfone".'
+ :'O navegador já não mostra o pedido porque o microfone foi bloqueado para esta página. Para desbloquear:\n1) Clique no ícone à esquerda do endereço → Microfone → Permitir.\n   Ou abra chrome://settings/content/microphone e retire esta página da lista "Bloqueado".\n2) Recarregue a página e clique em "Permitir microfone".\n3) Se continuar: Windows → Privacidade → Microfone, ou macOS → Privacidade e Segurança → Microfone → ative o navegador.';
 async function checkMicPermission(){
-  const env=micEnvironmentProblem();
-  if(env){ micUI('unsupported',env); return; }
-  try{
-    const p=await navigator.permissions.query({name:'microphone'});
+  const env=micEnvironmentProblem(); if(env){ micUI('unsupported',env); return; }
+  try{ const p=await navigator.permissions.query({name:'microphone'});
     micUI(p.state); if(p.state==='granted') listMics();
     p.onchange=()=>{ micUI(p.state); if(p.state==='granted') listMics(); };
   }catch(e){ micUI('prompt'); }
 }
-function micEnvironmentProblem(){
-  let inFrame=false; try{ inFrame=window.self!==window.top; }catch(e){ inFrame=true; }
-  const pol=document.permissionsPolicy||document.featurePolicy;
-  const policyBlocks=pol && pol.allowsFeature && !pol.allowsFeature('microphone');
-  if(inFrame||policyBlocks) return 'Está a ver a página dentro de uma pré-visualização (por exemplo, no app do Claude), que nunca permite o microfone. Descarregue o ficheiro e abra-o diretamente no Chrome ou Edge — de preferência com o atalho "abrir-copiloto" incluído.';
-  if(IS_ANDROID && !/^https:$/.test(location.protocol) && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname))
-    return 'No Android, o Chrome não deixa uma página aberta como ficheiro ('+location.protocol+') usar o microfone, mesmo que o Chrome tenha a permissão. Abra a página por um endereço https:// (por exemplo, publicada no GitHub Pages ou no Netlify) e toque em "Permitir microfone".';
-  if(!window.isSecureContext) return 'A página foi aberta por um endereço não seguro ('+location.protocol+'//'+location.host+'). O navegador só permite o microfone em https://, em http://localhost ou a partir de um ficheiro local. Use o atalho "abrir-copiloto".';
-  if(!navigator.mediaDevices?.getUserMedia) return 'Este navegador não dá acesso ao microfone. Use o Chrome ou o Edge numa versão recente, no computador.';
-  return '';
-}
-const RESET_HELP='O navegador tem o microfone bloqueado para esta página e por isso já não mostra o pedido. Para desbloquear:\n1) Clique no ícone à esquerda do endereço (cadeado, "i" ou câmara riscada) → Microfone → Permitir.\n   Ou abra chrome://settings/content/microphone (Edge: edge://settings/content/microphone), retire esta página da lista "Bloqueado" e confirme que o microfone certo está escolhido.\n2) Recarregue a página (F5) e clique em "Permitir microfone" de novo.\n3) Se continuar bloqueado: Windows → Definições → Privacidade → Microfone → ative "Permitir que as aplicações de ambiente de trabalho acedam ao microfone". macOS → Definições do Sistema → Privacidade e Segurança → Microfone → ative o Chrome/Edge.';
 async function requestMic(){
-  const env=micEnvironmentProblem();
-  if(env){ micUI('unsupported',env); return false; }
-  let pre='prompt';
-  try{ pre=(await navigator.permissions.query({name:'microphone'})).state; }catch(e){}
+  const env=micEnvironmentProblem(); if(env){ micUI('unsupported',env); return false; }
+  let pre='prompt'; try{ pre=(await navigator.permissions.query({name:'microphone'})).state; }catch(e){}
   if(pre==='denied'){ micUI('denied',RESET_HELP); return false; }
-  $('micState').textContent='À espera da sua resposta no aviso do navegador…';
+  $('micState').textContent='Responda ao aviso do navegador…';
   const t0=performance.now();
-  try{
-    const s=await navigator.mediaDevices.getUserMedia({audio:true});
-    s.getTracks().forEach(t=>t.stop());
-    micUI('granted'); await listMics(); return true;
-  }catch(err){
-    const instant=performance.now()-t0<250; // recusado sem mostrar o aviso
-    if(err.name==='NotAllowedError'||err.name==='SecurityError') micUI('denied', instant ? RESET_HELP : 'Escolheu "Bloquear" no aviso. Clique de novo em "Permitir microfone"; se o aviso já não aparecer, siga estes passos:\n'+RESET_HELP);
-    else if(err.name==='NotFoundError') micUI('prompt','Nenhum microfone encontrado. Ligue um microfone ou auscultadores e tente de novo.');
-    else if(err.name==='NotReadableError') micUI('prompt','O microfone está a ser usado por outra aplicação (Teams, Zoom…). Feche-a ou escolha outro dispositivo.');
+  try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); micUI('granted'); await listMics(); return true; }
+  catch(err){
+    const instant=performance.now()-t0<250;
+    if(err.name==='NotAllowedError'||err.name==='SecurityError') micUI('denied', instant?RESET_HELP:'Escolheu "Bloquear". Toque de novo em "Permitir microfone"; se o aviso não aparecer:\n'+RESET_HELP);
+    else if(err.name==='NotFoundError') micUI('prompt','Nenhum microfone encontrado.');
+    else if(err.name==='NotReadableError') micUI('prompt','O microfone está ocupado por outra aplicação (chamada, gravador, WhatsApp…). Feche-a e tente de novo.');
     else micUI('prompt','Erro ao aceder ao microfone: '+err.message);
     return false;
   }
@@ -345,7 +548,7 @@ async function listMics(){
     const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
     const sel=$('micSel'), keep=sel.value||pendingMic;
     sel.innerHTML='<option value="">Padrão do sistema</option>';
-    devs.forEach((d,i)=>{ if(d.deviceId==='default') return; const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microfone '+(i+1)); sel.appendChild(o); });
+    devs.forEach((d,i)=>{ if(d.deviceId==='default'||!d.deviceId) return; const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microfone '+(i+1)); sel.appendChild(o); });
     pendingMic=keep; selectMic();
   }catch(e){}
 }
@@ -353,78 +556,71 @@ function selectMic(){ const sel=$('micSel'); if(pendingMic && [...sel.options].s
 navigator.mediaDevices?.addEventListener?.('devicechange',()=>{ if(micPermission==='granted') listMics(); });
 $('micSel').addEventListener('change',()=>{ pendingMic=$('micSel').value; if(listening){ stopListening(); startListening(); } });
 $('btnMic').onclick=requestMic;
-function micConstraints(){ const id=$('micSel').value; return {deviceId:id?{exact:id}:undefined,echoCancellation:true,noiseSuppression:true}; }
+function micConstraints(){ const id=$('micSel').value; return {deviceId:id?{exact:id}:undefined,echoCancellation:true,noiseSuppression:true,autoGainControl:true}; }
 
 let testStream=null, testCtx=null, testRaf=null, testTimer=null;
 function stopTest(){ cancelAnimationFrame(testRaf); clearTimeout(testTimer); testStream&&testStream.getTracks().forEach(t=>t.stop()); testCtx&&testCtx.close(); testStream=testCtx=null; $('testLevel').style.width='0'; $('btnTest').textContent='Testar microfone'; }
 $('btnTest').onclick=async()=>{
   if(testStream){ stopTest(); return; }
-  try{ testStream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()}); }
-  catch(e){ await requestMic(); return; }
+  if(listening){ $('micHint').textContent='Pare a escuta antes de testar o microfone.'; return; }
+  try{ testStream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()}); }catch(e){ await requestMic(); return; }
   micUI('granted'); listMics();
   testCtx=new AudioContext(); const an=testCtx.createAnalyser(); an.fftSize=1024; testCtx.createMediaStreamSource(testStream).connect(an);
   const buf=new Float32Array(an.fftSize);
   const tick=()=>{ an.getFloatTimeDomainData(buf); let s=0; for(const v of buf) s+=v*v; $('testLevel').style.width=Math.min(100,Math.sqrt(s/buf.length)*600)+'%'; testRaf=requestAnimationFrame(tick); };
   tick(); $('btnTest').textContent='Parar teste (fale agora)'; testTimer=setTimeout(stopTest,10000);
 };
-checkMicPermission();
 
-/* ---------- UI helpers ---------- */
+/* ---------- Ajustes ---------- */
 function setStatus(t,on){ $('statusTxt').textContent=t; $('dot').classList.toggle('on',!!on); }
 function syncEngine(){
-  if(!$('engine').value) $('engine').value='whisper-openai';   // valor antigo "whisper"
+  if(!$('engine').value) $('engine').value='whisper-openai';
   if(!$('provider').value) $('provider').value='groq';
+  if(!$('groqModel').value) $('groqModel').selectedIndex=0;   // modelo guardado já não existe
   const eng=$('engine').value, prov=$('provider').value;
   $('langBox').hidden = eng!=='browser';
   $('openaiBox').hidden = eng!=='whisper-openai';
   $('groqBox').hidden = !(eng==='whisper-groq' || prov==='groq');
   $('groqModelBox').hidden = prov!=='groq';
   $('claudeBox').hidden = prov!=='anthropic';
+  readiness();
 }
 $('provider').addEventListener('change',syncEngine);
 $('engine').addEventListener('change',()=>{ syncEngine(); if(listening){ stopListening(); startListening(); } });
 $('lang').addEventListener('change',()=>{ if(listening && recog){ recog.stop(); } });
-syncEngine();
-const fmtPause = ()=> $('pauseVal').textContent = Number($('pause').value).toFixed(1).replace('.',',')+' s';
-$('pause').addEventListener('input',fmtPause); fmtPause();
+const fmtPause=()=> $('pauseVal').textContent=Number($('pause').value).toFixed(1).replace('.',',')+' s';
+$('pause').addEventListener('input',fmtPause);
 
-/* ---------- CV loading ---------- */
+/* ---------- Currículo ---------- */
 if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 $('drop').onclick=()=>$('cvFile').click();
 $('drop').onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('cvFile').click(); } };
-$('drop').ondragover=e=>{e.preventDefault();};
-$('drop').ondrop=e=>{e.preventDefault(); if(e.dataTransfer.files[0]) readCV(e.dataTransfer.files[0]);};
-$('cvFile').onchange=e=>{ if(e.target.files[0]) readCV(e.target.files[0]); };
+$('drop').ondragover=e=>e.preventDefault();
+$('drop').ondrop=e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) readCV(e.dataTransfer.files[0]); };
+$('cvFile').onchange=e=>{ if(e.target.files[0]) readCV(e.target.files[0]); e.target.value=''; };
 async function readCV(file){
-  $('drop').textContent='A ler '+file.name+'…';
+  $('drop').innerHTML='<strong>A ler o ficheiro…</strong>'; $('drop').querySelector('strong').after(document.createTextNode(file.name));
   try{
-    let text='';
-    const name=file.name.toLowerCase();
-    if(name.endsWith('.pdf')){
+    let text=''; const name=file.name.toLowerCase();
+    if(name.endsWith('.pdf')||file.type==='application/pdf'){
       const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
       for(let i=1;i<=pdf.numPages;i++){ const c=await (await pdf.getPage(i)).getTextContent(); text+=c.items.map(x=>x.str).join(' ')+'\n'; }
-    } else if(name.endsWith('.docx')){
-      text=(await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()})).value;
-    } else text=await file.text();
-    $('cvText').value=text.replace(/[ \t]+/g,' ').trim();
-    $('drop').classList.add('ok'); $('drop').textContent='Currículo carregado ✓ '+file.name+' (clique para trocar)';
-    store.save();
-  }catch(err){ $('drop').classList.remove('ok'); $('drop').textContent='Não consegui ler o ficheiro ('+err.message+'). Cole o texto em "Ver / editar".'; }
+    } else if(name.endsWith('.docx')){ text=(await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()})).value; }
+    else text=await file.text();
+    text=text.replace(/[ \t]+/g,' ').trim();
+    if(text.length<30) throw new Error('não encontrei texto (pode ser um PDF digitalizado como imagem)');
+    $('cvText').value=text; cvDropState(); store.save();
+  }catch(err){ $('drop').classList.remove('ok'); $('drop').innerHTML='<strong>Não consegui ler o ficheiro</strong>'; $('drop').append(err.message+'. Cole o texto abaixo.'); }
 }
 
-/* ---------- Transcript state ---------- */
-let finalText='';      // texto da pergunta em curso (desde a última sugestão)
-let interimText='';
-let doneText='';       // texto já tratado
-let hold=false;        // deteção pausada enquanto o candidato responde
-let pauseTimer=null;
+/* ---------- Transcrição ---------- */
+let finalText='', interimText='', doneText='', hold=false, pauseTimer=null;
 function renderTranscript(){
-  const t=$('transcript');
-  t.innerHTML='';
+  const t=$('transcript'); t.innerHTML='';
   if(doneText){ const s=document.createElement('span'); s.className='done'; s.textContent=doneText+'\n'; t.appendChild(s); }
   const cur=document.createElement('span'); cur.textContent=finalText; t.appendChild(cur);
   if(interimText){ const s=document.createElement('span'); s.className='interim'; s.textContent=' '+interimText; t.appendChild(s); }
-  if(!doneText && !finalText && !interimText) t.innerHTML='<span class="hint">A ouvir… fale ou deixe o entrevistador falar.</span>';
+  if(!doneText&&!finalText&&!interimText) t.innerHTML='<span class="hint">'+(listening?'A ouvir… deixe o entrevistador falar.':'Toque em "Começar a ouvir" e deixe o entrevistador falar.')+'</span>';
   t.scrollTop=t.scrollHeight;
 }
 function addFinal(txt){
@@ -432,59 +628,46 @@ function addFinal(txt){
   if(hold){ doneText+=(doneText?' ':'')+'[você] '+txt; renderTranscript(); return; }
   finalText+=(finalText?' ':'')+txt; renderTranscript(); armPause();
 }
-function armPause(){
-  clearTimeout(pauseTimer);
-  pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, Number($('pause').value)*1000);
-}
+function armPause(){ clearTimeout(pauseTimer); pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, Number($('pause').value)*1000); }
 function speechActivity(){ clearTimeout(pauseTimer); }
-
-/* Heurística rápida de pergunta (PT/EN); o modelo confirma depois */
 const QWORDS=/(\?|\b(o que|oque|como|por que|porque|porquê|pq|qual|quais|quando|onde|quem|quanto|quantos|quantas|fale|fala|conte|conta|descreva|descreve|explique|explica|diga|me diz|poderia|pode|consegue|você tem|tem alguma|já teve|já trabalhou|gostaria|what|how|why|when|where|who|which|tell me|describe|explain|walk me|can you|could you|would you|do you|did you|have you|are you|is there|give me an example)\b)/i;
 function looksLikeQuestion(t){ return QWORDS.test(t) && t.split(/\s+/).length>=3; }
 
-/* ---------- Engine: browser Web Speech ---------- */
+/* Motor: reconhecimento de voz do navegador */
 let recog=null, listening=false;
 function startBrowser(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alertBanner('Este navegador não suporta reconhecimento de voz. Use Chrome ou Edge, ou escolha o motor Whisper.'); return false; }
+  if(!SR){ alertBanner('Este navegador não tem reconhecimento de voz. Use o Chrome, ou escolha o motor Whisper — Groq em Ajustes.'); return false; }
   recog=new SR(); recog.continuous=!IS_MOBILE; recog.interimResults=true; recog.lang=$('lang').value; recog.maxAlternatives=1;
-  let lastFinal=''; // no Android o Chrome repete o texto anterior em cada resultado final
+  let lastFinal='';
   recog.onresult=e=>{
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       const r=e.results[i]; let t=r[0].transcript;
-      if(r.isFinal){
-        if(IS_MOBILE && lastFinal && t.toLowerCase().startsWith(lastFinal.toLowerCase())) t=t.slice(lastFinal.length);
-        lastFinal=r[0].transcript; addFinal(t);
-      } else interim+=t;
+      if(r.isFinal){ if(IS_MOBILE && lastFinal && t.toLowerCase().startsWith(lastFinal.toLowerCase())) t=t.slice(lastFinal.length); lastFinal=r[0].transcript; addFinal(t); }
+      else interim+=t;
     }
     interimText=interim; if(interim) speechActivity(); renderTranscript();
   };
   recog.onstart=()=>{ lastFinal=''; };
   recog.onerror=e=>{
-    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      alertBanner(location.protocol==='file:'
-        ? 'O reconhecimento de voz do navegador foi bloqueado porque a página está aberta como ficheiro. Feche e abra pelo atalho "abrir-copiloto" (http://localhost:8765), ou mude o motor para Whisper.'
-        : 'O reconhecimento de voz foi bloqueado. Veja o painel "Microfone" para desbloquear.');
-      stopListening();
-    } else if(e.error==='network'){ alertBanner('O reconhecimento de voz do navegador precisa de internet. Verifique a ligação.'); }
-    else if(e.error==='audio-capture'){ alertBanner('O microfone está ocupado por outra aplicação (chamada, gravador, WhatsApp…). Feche-a e toque em Iniciar escuta de novo.'); stopListening(); }
-    // 'no-speech' e 'aborted' são normais: a escuta reinicia sozinha
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){ alertBanner('O reconhecimento de voz foi bloqueado. Veja Ajustes → Microfone.'); stopListening(); }
+    else if(e.error==='network') alertBanner('O reconhecimento de voz do navegador precisa de internet.');
+    else if(e.error==='audio-capture'){ alertBanner('O microfone está ocupado por outra aplicação (chamada, gravador, WhatsApp…). Feche-a e toque em Começar a ouvir.'); stopListening(); }
   };
-  recog.onend=()=>{ if(listening && $('engine').value==='browser'){ setTimeout(()=>{ if(!listening||!recog) return; recog.lang=$('lang').value; try{recog.start()}catch(e){} }, IS_MOBILE?150:0); } };
+  recog.onend=()=>{ if(listening && $('engine').value==='browser') setTimeout(()=>{ if(!listening||!recog) return; recog.lang=$('lang').value; try{recog.start()}catch(e){} }, IS_MOBILE?150:0); };
   recog.start(); return true;
 }
 
-/* ---------- Engine: Whisper (segmenta por silêncio) ---------- */
-let stream=null, actx=null, analyser=null, rafId=null, mrec=null, chunks=[], speaking=false, lastVoice=0;
+/* Motor: Whisper (Groq ou OpenAI), segmenta por silêncio */
+let stream=null, actx=null, rafId=null, mrec=null, chunks=[], speaking=false, lastVoice=0;
 async function startMeter(){
   stream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()});
-  actx=new AudioContext(); analyser=actx.createAnalyser(); analyser.fftSize=1024;
+  actx=new AudioContext(); const analyser=actx.createAnalyser(); analyser.fftSize=1024;
   actx.createMediaStreamSource(stream).connect(analyser);
   const buf=new Float32Array(analyser.fftSize);
   const tick=()=>{
-    analyser.getFloatTimeDomainData(buf);
-    let s=0; for(const v of buf) s+=v*v; const rms=Math.sqrt(s/buf.length);
+    analyser.getFloatTimeDomainData(buf); let s=0; for(const v of buf) s+=v*v; const rms=Math.sqrt(s/buf.length);
     $('level').style.width=Math.min(100,rms*600)+'%';
     if($('engine').value.startsWith('whisper')) whisperVAD(rms);
     rafId=requestAnimationFrame(tick);
@@ -502,96 +685,116 @@ async function sendWhisper(){
   if(blob.size<6000){ interimText=''; renderTranscript(); return; }
   const groq=$('engine').value==='whisper-groq';
   const key=(groq?$('groqKey'):$('openaiKey')).value.trim();
-  if(!key){ interimText=''; renderTranscript(); alertBanner('Introduza a chave API '+(groq?'Groq':'OpenAI')+' na Configuração para usar o Whisper.'); return; }
+  if(!key){ interimText=''; renderTranscript(); alertBanner('Falta a chave API '+(groq?'Groq':'OpenAI')+' em Ajustes para usar o Whisper.'); return; }
   interimText='(a transcrever…)'; renderTranscript();
-  const fd=new FormData(); fd.append('file',blob,'audio.webm'); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
+  const ext=(mrec.mimeType||'').includes('mp4')?'mp4':(mrec.mimeType||'').includes('ogg')?'ogg':'webm';
+  const fd=new FormData(); fd.append('file',blob,'audio.'+ext); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
   fd.append('prompt','Entrevista de emprego / job interview. Português e English.');
-  const url=groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions';
   try{
-    const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
-    if(r.status===429){ interimText=''; renderTranscript(); alertBanner('Limite gratuito do Groq atingido por agora. Espere um minuto ou mude o motor para Navegador.'); return; }
+    const r=await fetch(groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+    if(r.status===429){ interimText=''; renderTranscript(); alertBanner('Limite gratuito atingido por agora. Espere um minuto ou mude o motor para Navegador.'); return; }
     const j=await r.json(); interimText='';
     if(!r.ok) throw new Error(j.error?.message||r.status);
     addFinal(j.text||'');
-  }catch(err){ interimText=''; renderTranscript(); alertBanner('Erro no Whisper: '+err.message); }
+  }catch(err){ interimText=''; renderTranscript(); alertBanner('Erro na transcrição: '+err.message); }
 }
 
-/* ---------- Start / stop ---------- */
+/* ---------- Começar / parar ---------- */
+let wakeLock=null;
+async function keepAwake(on){
+  try{ if(on && $('wake').checked && 'wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); } else if(!on && wakeLock){ await wakeLock.release(); wakeLock=null; } }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && listening) keepAwake(true); });
+function setStartUI(on){ $('btnStart').classList.toggle('rec',on); $('startLbl').textContent=on?'Parar de ouvir':'Começar a ouvir'; }
 async function startListening(){
   if(testStream) stopTest();
-  if(micPermission!=='granted' && !(await requestMic())){
-    alertBanner('É preciso autorizar o microfone primeiro — veja as instruções no painel "Microfone".');
-    $('micSec').scrollIntoView({behavior:'smooth',block:'center'}); return;
-  }
-  // No telemóvel o microfone só pode ter um utilizador de cada vez: no motor Navegador
-  // deixamos o microfone só para o reconhecimento de voz (sem medidor de nível).
-  const needMeter = $('engine').value.startsWith('whisper') || !IS_MOBILE;
-  if(needMeter){ try{ await startMeter(); }catch(e){ alertBanner('Não foi possível aceder ao microfone: '+e.message); return; } }
+  if(micPermission!=='granted' && !(await requestMic())){ alertBanner('É preciso autorizar o microfone primeiro.'); return; }
+  const needMeter=$('engine').value.startsWith('whisper') || !IS_MOBILE; // no telemóvel o microfone só tem um utilizador
+  if(needMeter){ try{ await startMeter(); }catch(e){ alertBanner('Não foi possível usar o microfone: '+e.message); return; } }
   listening=true;
   if($('engine').value==='browser' && !startBrowser()){ stopListening(); return; }
-  $('btnStart').textContent='■ Parar escuta'; $('btnStart').className='rec';
-  setStatus(hold?'A ouvir (deteção pausada)':'A ouvir',true); renderTranscript();
+  setStartUI(true); keepAwake(true);
+  setStatus(hold?'A ouvir · pausado':'A ouvir',true); renderTranscript();
 }
 function stopListening(){
   listening=false; clearTimeout(pauseTimer);
   try{recog&&recog.stop()}catch(e){} recog=null;
   try{mrec&&mrec.state!=='inactive'&&mrec.stop()}catch(e){} speaking=false;
-  cancelAnimationFrame(rafId); stream&&stream.getTracks().forEach(t=>t.stop()); actx&&actx.close(); stream=actx=null;
-  $('level').style.width='0'; interimText='';
-  $('btnStart').textContent='● Iniciar escuta'; $('btnStart').className='primary'; setStatus('Parado',false);
+  cancelAnimationFrame(rafId); stream&&stream.getTracks().forEach(t=>t.stop()); try{actx&&actx.close()}catch(e){} stream=actx=null;
+  $('level').style.width='0'; interimText=''; setStartUI(false); keepAwake(false); setStatus('Parado',false); renderTranscript();
 }
 $('btnStart').onclick=()=> listening?stopListening():startListening();
-function setHold(v){ hold=v; $('btnResume').disabled=!v; if(listening) setStatus(v?'A ouvir (deteção pausada)':'A ouvir',true); }
+function setHold(v){ hold=v; $('btnResume').disabled=!v; if(listening) setStatus(v?'A ouvir · pausado':'A ouvir',true); }
 $('btnResume').onclick=()=>setHold(false);
 document.addEventListener('keydown',e=>{ if(e.code==='Space' && hold && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); setHold(false); } });
-$('btnNow').onclick=()=>{ const t=(finalText+' '+interimText).trim(); if(t) maybeAnswer(t,true); };
+$('btnNow').onclick=()=>{ const t=(finalText+' '+interimText).trim(); if(t) maybeAnswer(t,true); else alertBanner('Ainda não há texto ouvido para responder.'); };
 $('btnClear').onclick=()=>{ finalText=interimText=doneText=''; renderTranscript(); };
-$('btnAsk').onclick=()=>{ const t=$('manualQ').value.trim(); if(t){ $('manualQ').value=''; maybeAnswer(t,true); } };
+$('btnAsk').onclick=()=>{ const t=$('manualQ').value.trim(); if(t){ $('manualQ').value=''; $('manualQ').blur(); maybeAnswer(t,true); } };
 $('manualQ').onkeydown=e=>{ if(e.key==='Enter') $('btnAsk').click(); };
+function alertBanner(msg){
+  const c=$('current'); const prev=c.querySelector('.card.current');
+  if(prev){ archive(prev); }
+  c.innerHTML=''; const b=document.createElement('div'); b.className='banner'; b.textContent=msg; c.appendChild(b);
+  if(view!=='live') go('live');
+}
 
-function alertBanner(msg){ const c=$('current'); c.className='banner'; c.textContent=msg; }
-
-/* ---------- Answer generation (Claude) ---------- */
-let busy=false, abortCtl=null;
+/* ---------- Gerar respostas ---------- */
+let abortCtl=null;
 async function maybeAnswer(text,forced){
   if(!forced && !looksLikeQuestion(text)) return;
   const prov=$('provider').value;
   const key=(prov==='groq'?$('groqKey'):$('claudeKey')).value.trim();
-  if(!key){ alertBanner('Introduza a chave API '+(prov==='groq'?'Groq (grátis em console.groq.com)':'Anthropic')+' na Configuração para gerar respostas.'); return; }
-  const streamFn = prov==='groq' ? streamGroq : streamClaude;
+  if(!key){ alertBanner('Falta a chave API '+(prov==='groq'?'Groq (grátis em console.groq.com)':'Anthropic')+'. Toque em Ajustes para a colar.'); return; }
+  const streamFn=prov==='groq'?streamGroq:streamClaude;
   if(abortCtl) abortCtl.abort();
-  // move texto para "tratado"
   if(finalText){ doneText+=(doneText?'\n':'')+'[entrevistador] '+finalText.trim(); finalText=''; renderTranscript(); }
   const card=newCard(text);
   abortCtl=new AbortController();
   try{
     let raw='';
-    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, abortCtl.signal, delta=>{ raw+=delta; paint(card,raw,false); });
+    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, abortCtl.signal, d=>{ raw+=d; paint(card,raw,false); });
     paint(card,raw,true);
     if($('holdAfter').checked && card.dataset.type!=='nao') setHold(true);
-  }catch(err){
-    if(err.name!=='AbortError') card.querySelector('.ans').textContent='Erro: '+err.message;
+  }catch(err){ if(err.name!=='AbortError') card.querySelector('.ans').textContent='Erro: '+err.message; }
+}
+async function readSSE(r,onData){
+  const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
+  for(;;){ const {done,value}=await rd.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true}); const lines=buf.split('\n'); buf=lines.pop();
+    for(const l of lines){ if(!l.startsWith('data:')) continue; const d=l.slice(5).trim(); if(d==='[DONE]') return; let ev; try{ ev=JSON.parse(d); }catch(e){ continue; } onData(ev); }
   }
 }
+async function errorOf(r){ let m='erro '+r.status; try{ m=(await r.json()).error?.message||m; }catch(e){} return new Error(m); }
 async function streamGroq(key,system,user,signal,onDelta){
-  const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-    method:'POST',signal,
-    headers:{'content-type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({model:$('groqModel').value,max_tokens:700,temperature:0.5,stream:true,
-      messages:[{role:'system',content:system},{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})
-  });
-  if(r.status===429) throw new Error('Limite gratuito do Groq atingido por agora. Espere cerca de um minuto, ou escolha outro modelo Groq na Configuração.');
-  if(!r.ok){ let m=r.status; try{ m=(await r.json()).error?.message||m }catch(e){} throw new Error(m); }
-  const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
-  for(;;){
-    const {done,value}=await rd.read(); if(done) break;
-    buf+=dec.decode(value,{stream:true});
-    const lines=buf.split('\n'); buf=lines.pop();
-    for(const l of lines){
-      if(!l.startsWith('data:')) continue; const d=l.slice(5).trim(); if(d==='[DONE]') return;
-      try{ const ev=JSON.parse(d); const t=ev.choices?.[0]?.delta?.content; if(t) onDelta(t); }catch(e){}
+  // Tenta o modelo escolhido; se o Groq o tiver retirado, passa para o próximo da lista e guarda a troca.
+  const sel=$('groqModel');
+  const order=[sel.value,...[...sel.options].map(o=>o.value).filter(v=>v!==sel.value)];
+  let lastErr=null;
+  for(const model of order){
+    const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal,
+      headers:{'content-type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model,max_tokens:900,temperature:0.5,stream:true,
+        messages:[{role:'system',content:system},{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
+    if(r.status===401) throw new Error('Chave Groq inválida. Confirme em Ajustes (começa por gsk_).');
+    if(r.status===429){ lastErr=new Error('Limite gratuito do Groq atingido por agora. Espere cerca de um minuto, ou escolha outro modelo em Ajustes.'); continue; }
+    if(!r.ok){
+      const err=await errorOf(r);
+      if(r.status===404 || /does not exist|decommissioned|not found|no access/i.test(err.message)){ lastErr=err; continue; }
+      throw err;
     }
+    if(model!==sel.value){ sel.value=model; store.save(); }
+    await readSSE(r,ev=>{ const t=ev.choices?.[0]?.delta?.content; if(t) onDelta(t); });
+    return;
   }
+  throw lastErr||new Error('Nenhum modelo Groq disponível de momento.');
+}
+async function streamClaude(key,system,user,signal,onDelta){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,
+    headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:$('model').value,max_tokens:700,stream:true,system,messages:[{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
+  if(r.status===401) throw new Error('Chave Anthropic inválida. Confirme em Ajustes (começa por sk-ant-).');
+  if(!r.ok) throw await errorOf(r);
+  await readSSE(r,ev=>{ if(ev.type==='error') throw new Error(ev.error?.message); if(ev.type==='content_block_delta'&&ev.delta?.text) onDelta(ev.delta.text); });
 }
 function buildSystem(cvLimit=20000){
   const v=id=>$(id).value.trim()||'(não informado)';
@@ -624,49 +827,42 @@ Questões práticas: ${v('pPractical')}
 === VAGA ===
 ${v('pJob')}`;
 }
-async function streamClaude(key,system,user,signal,onDelta){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',signal,
-    headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:$('model').value,max_tokens:700,stream:true,system,messages:[{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})
-  });
-  if(!r.ok){ let m=r.status; try{ m=(await r.json()).error?.message||m }catch(e){} throw new Error(m); }
-  const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
-  for(;;){
-    const {done,value}=await rd.read(); if(done) break;
-    buf+=dec.decode(value,{stream:true});
-    const lines=buf.split('\n'); buf=lines.pop();
-    for(const l of lines){ if(!l.startsWith('data:')) continue;
-      try{ const ev=JSON.parse(l.slice(5)); if(ev.type==='content_block_delta' && ev.delta?.text) onDelta(ev.delta.text); if(ev.type==='error') throw new Error(ev.error?.message); }catch(e){ if(e.message && !/JSON/.test(e.message)) throw e; }
-    }
-  }
+function archive(card){
+  card.classList.remove('current');
+  if(card.dataset.type==='nao'||!card.dataset.type){ card.remove(); return; }
+  const h=$('history'); if(h.querySelector('.hint')) h.innerHTML=''; h.prepend(card);
 }
 function newCard(q){
-  const prev=$('current').querySelector('.card');
-  if(prev){ prev.classList.remove('current'); const h=$('history'); if(h.querySelector('.hint')) h.innerHTML=''; h.prepend(prev); }
-  $('current').className=''; $('current').innerHTML='';
+  const c0=$('current'); const prev=c0.querySelector('.card.current'); if(prev) archive(prev);
+  c0.innerHTML='';
   const c=document.createElement('div'); c.className='card current';
   c.innerHTML='<div class="tags"></div><div class="q"></div><div class="ans">A pensar…</div>';
   c.querySelector('.q').textContent=q;
-  $('current').appendChild(c); return c;
+  c0.appendChild(c);
+  if(view!=='live') go('live');
+  return c;
 }
 function paint(card,raw,final){
-  const nl=raw.indexOf('\n');
-  if(nl<0 && !final) return;
+  const nl=raw.indexOf('\n'); if(nl<0 && !final) return;
   const head=nl<0?raw:raw.slice(0,nl), body=nl<0?'':raw.slice(nl+1).trim();
-  const type=(head.match(/TIPO:\s*(\w+)/i)||[])[1]?.toLowerCase()||'';
+  const type=((head.match(/TIPO:\s*(\w+)/i)||[])[1]||'').toLowerCase();
   const lang=(head.match(/IDIOMA:\s*(\w+)/i)||[])[1]||'';
   const q=(head.match(/PERGUNTA:\s*(.+)$/i)||[])[1];
   card.dataset.type=type.startsWith('n')?'nao':type;
-  if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si — a continuar a ouvir.'; card.style.opacity=.6; return; }
+  if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si. A continuar a ouvir.'; card.style.opacity=.6; return; }
   const tags=card.querySelector('.tags'); tags.innerHTML='';
   if(type){ const t=document.createElement('span'); t.className='tag '+(type.startsWith('prof')?'pro':'pes'); t.textContent=type.startsWith('prof')?'Profissional · CV':'Pessoal · Perfil'; tags.appendChild(t); }
   if(lang){ const t=document.createElement('span'); t.className='tag lang'; t.textContent=lang.toUpperCase(); tags.appendChild(t); }
   if(q) card.querySelector('.q').textContent=q.trim();
   const a=card.querySelector('.ans'); a.textContent='';
-  body.split(/(\*\*[^*]+\*\*)/).forEach(part=>{ if(/^\*\*.+\*\*$/.test(part)){ const s=document.createElement('strong'); s.textContent=part.slice(2,-2); a.appendChild(s);} else a.appendChild(document.createTextNode(part)); });
+  body.split(/(\*\*[^*]+\*\*)/).forEach(p=>{ if(/^\*\*.+\*\*$/.test(p)){ const s=document.createElement('strong'); s.textContent=p.slice(2,-2); a.appendChild(s);} else a.appendChild(document.createTextNode(p)); });
   if(!body) a.textContent='A escrever…';
 }
+
+/* ---------- Arranque ---------- */
+syncEngine(); fmtPause(); cvDropState(); checkMicPermission(); readiness();
+let startView='live'; try{ startView=sessionStorage.getItem('copiloto-view')||'live'; }catch(e){}
+go(startView);
 </script>
 </body>
 </html>
