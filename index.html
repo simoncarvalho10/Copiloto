@@ -86,6 +86,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #micHint{white-space:pre-line;color:var(--ink);font-size:.85rem}
 .readtext{background:var(--bg);border-radius:10px;padding:12px 14px;font-size:1.02rem;line-height:1.6;margin:12px 0 10px}
 #enrollBox .meter{height:8px}
+.gist{font-size:.88rem;color:var(--pes);margin:-4px 0 10px;line-height:1.4}
+.gist::before{content:"Ideia · ";font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;opacity:.85}
+.ans .l{display:block;line-height:1.38;margin-bottom:.5em}
+.ans .l:last-child{margin-bottom:0}
 .remind{margin-top:12px;font-family:var(--mono);font-size:.78rem;color:var(--muted);letter-spacing:.01em}
 #voiceLast{font-size:.7rem;padding:3px 9px}
 #voiceLast.me{color:var(--pes);border-color:var(--pes)} #voiceLast.other{color:var(--pro);border-color:var(--pro)}
@@ -422,6 +426,14 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
       <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo (só quando o reconhecimento de voz está desligado)</label>
       <label class="check"><input type="checkbox" id="saveKeys" checked> Guardar as chaves API neste aparelho</label>
       <label class="check"><input type="checkbox" id="wake" checked> Manter o ecrã ligado durante a escuta</label>
+      <label for="level">O meu nível de inglês (para as respostas em inglês)</label>
+      <select id="level">
+        <option value="B1">B1 — intermediário (frases bem simples)</option>
+        <option value="B1-B2" selected>B1–B2 — intermediário (recomendado)</option>
+        <option value="B2">B2 — intermediário avançado</option>
+        <option value="C1">C1 — avançado</option>
+      </select>
+      <label class="check"><input type="checkbox" id="gistOn" checked> Mostrar a ideia da resposta em português, por cima do texto em inglês</label>
       <label class="check"><input type="checkbox" id="subsOn" checked> Mostrar legenda em português por baixo da transcrição (quando o idioma não é português)</label>
     </section>
   </div>
@@ -465,9 +477,9 @@ matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
 
 /* ---------- Gravação automática ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
-const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','cName','cWhat','cCulture','cNews','cPeople','cWhy','cBridge','cNotes','engine','provider','groqModel','model','pause','micSel','voiceSens'];
+const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','cName','cWhat','cCulture','cNews','cPeople','cWhy','cBridge','cNotes','engine','provider','groqModel','model','pause','micSel','voiceSens','level'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
-const CHECKS = ['holdAfter','saveKeys','wake','voiceOn','subsOn'];
+const CHECKS = ['holdAfter','saveKeys','wake','voiceOn','subsOn','gistOn'];
 let saveTimer=null, pendingMic='', ansSize=1.15;
 const store = {
   collect(withKeys){
@@ -1036,7 +1048,7 @@ function setHold(v){ hold=v; $('btnResume').disabled=!v; if(listening) setStatus
 $('btnResume').onclick=()=>setHold(false);
 document.addEventListener('keydown',e=>{ if(e.code==='Space' && hold && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); setHold(false); } });
 $('btnNow').onclick=()=>{ const t=(finalText+' '+interimText).trim(); if(t) maybeAnswer(t,true); else alertBanner('Ainda não há texto ouvido para responder.'); };
-$('btnClear').onclick=()=>{ entries=[]; finalText=interimText=''; qaLog=[]; renderTranscript(); };
+$('btnClear').onclick=()=>{ entries=[]; finalText=interimText=''; qaLog=[]; saveMemory(); renderTranscript(); liveMsg('Transcrição e memória da entrevista limpas.'); };
 $('btnAsk').onclick=()=>{ const t=$('manualQ').value.trim(); if(t){ $('manualQ').value=''; $('manualQ').blur(); maybeAnswer(t,true); } };
 $('manualQ').onkeydown=e=>{ if(e.key==='Enter') $('btnAsk').click(); };
 let msgTimer=null;
@@ -1050,6 +1062,8 @@ function alertBanner(msg){ liveMsg(msg,'err'); if(view!=='live' && !$('liveMsg')
 
 /* ---------- Gerar respostas ---------- */
 let abortCtl=null, qaLog=[];
+try{ qaLog=JSON.parse(sessionStorage.getItem('copiloto-memoria')||'[]'); }catch(e){ qaLog=[]; }
+function saveMemory(){ try{ sessionStorage.setItem('copiloto-memoria',JSON.stringify(qaLog)); }catch(e){} }
 async function maybeAnswer(text,forced){
   text=(text||'').trim(); if(!text) return;
   const consume=()=>{ entries.forEach(e=>{ if(e.kind==='int') e.used=true; }); finalText=''; renderTranscript(); };
@@ -1062,7 +1076,7 @@ async function maybeAnswer(text,forced){
   consume();
   const ctl=new AbortController(); abortCtl=ctl;
   const card=document.createElement('div'); card.className='card current';
-  card.innerHTML='<div class="tags"></div><div class="q"></div><div class="ans"></div>';
+  card.innerHTML='<div class="tags"></div><div class="q"></div><div class="gist" hidden></div><div class="ans"></div>';
   card.querySelector('.q').textContent=text;
   let attached=false, raw='';
   const attach=()=>{ if(attached) return; attached=true; showCard(card); liveMsg(''); };
@@ -1075,7 +1089,10 @@ async function maybeAnswer(text,forced){
     const res=paint(card,raw,true);
     if(!res || res.type==='nao'){ if(abortCtl===ctl) liveMsg('Fala do entrevistador sem pergunta — mantive a resposta anterior.'); return; }
     attach();
-    qaLog.push({q:res.q||text, a:res.main.slice(0,500)}); if(qaLog.length>4) qaLog.shift();
+    const words=res.main.replace(/\n/g,' ').split(/\s+/);
+    qaLog.push({q:res.q||text, a:res.main.replace(/\n/g,' ').slice(0,450), rem:res.rem||'', open:words.slice(0,4).join(' '), type:res.type});
+    if(qaLog.length>20) qaLog.shift();
+    saveMemory();
     if(!voiceActive() && $('holdAfter').checked) setHold(true);
   }catch(err){
     if(err.name==='AbortError'){ if(attached) card.classList.add('cut'); return; }
@@ -1127,7 +1144,18 @@ function langName(){
 }
 function buildSystem(cvLimit=20000){
   const v=id=>$(id).value.trim()||'(não informado)';
-  const hist=qaLog.length? qaLog.map((x,i)=>`P${i+1}: ${x.q}\nResposta sugerida: ${x.a}`).join('\n\n') : '(início da entrevista)';
+  const isEN=$('lang').value.startsWith('en');
+  const gist=isEN && $('gistOn').checked;
+  const lvl={'B1':{name:'B1 (intermediário)',max:10,min:35,words:65},'B1-B2':{name:'B1–B2 (intermediário)',max:12,min:40,words:80},
+             'B2':{name:'B2 (intermediário avançado)',max:15,min:45,words:95},'C1':{name:'C1 (avançado)',max:20,min:50,words:110}}[isEN?$('level').value:'C1']
+           ||{name:'B1–B2',max:12,min:40,words:80};
+  const recent=qaLog.slice(-6), older=qaLog.slice(0,-6);
+  const hist=qaLog.length
+    ? (older.length?'Perguntas mais antigas (resumo): '+older.map(x=>x.q+(x.rem?' ['+x.rem+']':'')).join(' | ')+'\n\n':'')
+      + recent.map((x,i)=>`P${older.length+i+1}: ${x.q}\nResposta sugerida: ${x.a}`).join('\n\n')
+    : '(início da entrevista)';
+  const topics=[...new Set(qaLog.flatMap(x=>(x.rem||'').split(/[·,;]/).map(t=>t.trim()).filter(Boolean)))].join(', ')||'(nenhum ainda)';
+  const opens=[...new Set(qaLog.filter(x=>x.type!=='social').map(x=>x.open))].join(' | ')||'(nenhuma ainda)';
   return `És um copiloto discreto numa ENTREVISTA DE EMPREGO. Recebes a fala do entrevistador (transcrita automaticamente; pode ter erros e sotaques variados — interpreta a intenção) e sugeres o que o CANDIDATO pode dizer, na primeira pessoa, como se fosse ele a falar naquele momento.
 
 CONTEÚDO
@@ -1143,7 +1171,26 @@ CONTEÚDO
 - Se o nome de quem entrevista estiver indicado, não o uses em todas as respostas; no máximo de vez em quando, de forma natural.
 - Se for uma pergunta de seguimento ("e porquê?", "pode dar um exemplo?", "e o resultado?"), responde no contexto da CONVERSA ATÉ AGORA, sem repetir o que já foi dito.
 
-ESTILO — o mais importante
+MEMÓRIA DA ENTREVISTA — não ser repetitivo
+- Antes de escrever, lê a CONVERSA ATÉ AGORA, os TEMAS JÁ USADOS e as ABERTURAS JÁ USADAS.
+- Não repitas o mesmo exemplo, história, número ou frase que já apareceu, a menos que a pergunta peça exatamente isso. Se o currículo tiver outro exemplo que sirva, usa o outro.
+- Se for preciso voltar a um assunto já falado, faz só uma referência curta (em inglês: "Like I said before,", "Going back to that project,", "As I mentioned,"; em português: "Como comentei,", "Voltando àquele projeto,") e diz por outras palavras, acrescentando um detalhe NOVO (outro ângulo, outro resultado, o que aprendi) em vez de repetir a explicação.
+- Não reutilizes as mesmas palavras-chave, adjetivos e verbos de destaque das respostas anteriores; usa sinónimos simples (dentro do nível de inglês indicado).
+- Não comeces com nenhuma das ABERTURAS JÁ USADAS. Varia também os conectores entre frases.
+- Mantém a coerência: nunca contradigas factos, números ou datas já ditos nas respostas anteriores.
+
+FÁCIL DE DIZER — o mais importante de tudo
+- O candidato vai LER a resposta no ecrã enquanto fala, e não pode parecer que está a ler. Tem de conseguir apanhar a frase com um olhar e dizê-la com naturalidade.
+- Uma ideia por frase. Cada frase numa LINHA PRÓPRIA (quebra de linha entre frases).
+- Frases curtas: no máximo ${lvl.max} palavras. Nada de frases encaixadas umas nas outras.
+${isEN ? `- O candidato fala inglês de nível ${lvl.name}. Escreve para esse nível:
+  • só palavras muito comuns do inglês do dia a dia (as 2000–3000 mais usadas); quando houver escolha, prefere palavras parecidas com o português (experience, important, project, responsible, team, client, result);
+  • tempos verbais simples: present simple, past simple, present perfect${lvl.name==='C1'?'':'; evita condicionais complexos, voz passiva e "would have"'};
+  • sem expressões idiomáticas, gíria, phrasal verbs pouco comuns nem palavras difíceis de pronunciar;
+  • conectores simples para ganhar tempo e soar natural: "So,", "Well,", "For example,", "Because", "And then", "In the end,".` : '- Usa português falado do dia a dia, sem palavras rebuscadas.'}
+${gist ? '- Na SEGUNDA linha da saída, antes da resposta, escreve "IDEIA: " e a ideia central da resposta em português do Brasil, com no máximo 15 palavras.' : ''}
+
+ESTILO
 - Tem de soar a uma pessoa a falar, não a um texto escrito nem a um currículo lido em voz alta.
 - NUNCA copies frases, listas, títulos ou formulações do currículo. Usa-o só como fonte de factos e conta-os por palavras tuas, como uma pequena história: a situação, o que eu fiz, o que aconteceu.
 - Linguagem simples nas respostas profissionais: explica o que fizeste e o impacto como explicarias a alguém de fora da área. Evita termos técnicos, siglas e nomes de ferramentas, linguagens, sistemas ou metodologias (ex.: "SAP", "Power BI", "Python", "Scrum", "KPI"). Diz antes o que fizeste com eles ("montei relatórios que a direção usava todas as semanas").
@@ -1153,7 +1200,7 @@ ESTILO — o mais importante
 - Evita jargão e frases feitas: "sou proativo", "resiliente", "sinergia", "dinâmico", "agregar valor", "como consta no meu currículo", "ao longo da minha trajetória".
 - Varia o início das respostas; podes começar de forma natural ("Claro.", "Olha,", "Então,", "Boa pergunta —", "Sure,", "So,"), mas sem repetir a mesma abertura das respostas anteriores.
 - Para perguntas comportamentais, segue a lógica situação → ação → resultado, mas sem a anunciar.
-- Tamanho: SOCIAL 5 a 25 palavras; PESSOAL e PROFISSIONAL 50 a 110 palavras (30 a 45 segundos a falar); só com pedido de profundidade técnica até 150. Sem listas nem negrito na resposta.
+- Tamanho: SOCIAL 5 a 20 palavras; PESSOAL e PROFISSIONAL ${lvl.min} a ${lvl.words} palavras; só com pedido de profundidade técnica até ${lvl.words+40}. Sem listas, títulos nem negrito na resposta.
 - Depois das respostas PESSOAL e PROFISSIONAL, numa linha à parte: "Lembretes: " seguido de 2 ou 3 palavras-chave curtas separadas por " · " (para eu olhar de relance). Nas respostas SOCIAL não há lembretes.
 - Responde "TIPO: nao" (só a primeira linha, mais nada) quando o entrevistador NÃO está a pedir nada ao candidato: afirmações, concordâncias, elogios ou comentários sobre a resposta anterior ("Great, that makes sense.", "I agree.", "Interessante, nós também usamos isso.", "Perfeito, obrigado."), explicações sobre a empresa ou a vaga, ruído ou frases cortadas sem sentido.
 - Se houver uma afirmação seguida de uma pergunta, responde só à pergunta.
@@ -1161,10 +1208,13 @@ ESTILO — o mais importante
 
 FORMATO OBRIGATÓRIO — primeira linha exatamente:
 TIPO: social | pessoal | profissional | nao ; IDIOMA: ${$('lang').value} ; PERGUNTA: <pergunta reformulada de forma limpa>
-Depois uma linha em branco, a resposta e, se aplicável, a linha "Lembretes:".
+${gist ? 'Segunda linha: IDEIA: <ideia em português>. Depois uma linha em branco' : 'Depois uma linha em branco'}, a resposta (uma frase por linha) e, se aplicável, a linha "Lembretes:".
 
 === CONVERSA ATÉ AGORA ===
 ${hist}
+
+TEMAS JÁ USADOS: ${topics}
+ABERTURAS JÁ USADAS: ${opens}
 
 === CURRÍCULO (fonte de factos, não de frases) ===
 ${v('cvText').slice(0,cvLimit)}
@@ -1217,12 +1267,19 @@ function paint(card,raw,final){
     t.className='tag '+k[0]; t.textContent=k[1]; tags.appendChild(t); }
   if(lang){ const t=document.createElement('span'); t.className='tag lang'; t.textContent=lang.toUpperCase(); tags.appendChild(t); }
   if(q) card.querySelector('.q').textContent=q;
-  const parts=body.split(/\n?\s*(?:Lembretes|Reminders)\s*:\s*/i);
-  const main=parts[0].replace(/\*\*/g,'').trim(), rem=(parts[1]||'').trim();
-  const a=card.querySelector('.ans'); a.textContent=main||'A escrever…';
+  let txt=body, gist='';
+  const gm=txt.match(/^\s*IDEIA\s*:\s*(.*)(?:\n|$)/i);
+  if(gm){ gist=gm[1].trim(); txt=txt.slice(gm[0].length); }
+  else if(/^\s*I(D(E(I(A)?)?)?)?$/i.test(txt) && !final) txt='';      // ainda a chegar
+  const parts=txt.split(/\n?\s*(?:Lembretes|Reminders)\s*:\s*/i);
+  const main=parts[0].replace(/\*\*/g,'').split('\n').map(l=>l.trim()).filter(Boolean).join('\n'), rem=(parts[1]||'').trim();
+  const g=card.querySelector('.gist'); if(g){ g.hidden=!gist; g.textContent=gist; }
+  const a=card.querySelector('.ans'); a.textContent='';
+  if(!main) a.textContent='A escrever…';
+  else main.split('\n').forEach(line=>{ const sp=document.createElement('span'); sp.className='l'; sp.textContent=line; a.appendChild(sp); });
   let r=card.querySelector('.remind');
   if(rem){ if(!r){ r=document.createElement('div'); r.className='remind'; card.appendChild(r); } r.textContent='Lembretes: '+rem; }
-  return {type:card.dataset.type, q, main};
+  return {type:card.dataset.type, q, main, rem};
 }
 
 /* ---------- Arranque ---------- */
