@@ -137,9 +137,9 @@ details.test .row{margin-top:10px}
 
 /* ---------- Separadores ---------- */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:16;background:var(--panel);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(4,1fr);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  display:grid;grid-template-columns:repeat(5,1fr);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 nav.tabs button{background:none;border:0;border-radius:0;min-height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  font-size:.72rem;font-weight:600;color:var(--muted);padding:6px 2px;position:relative}
+  font-size:.68rem;font-weight:600;color:var(--muted);padding:6px 1px;position:relative}
 nav.tabs svg{width:22px;height:22px}
 nav.tabs button[aria-selected=true]{color:var(--accent)}
 nav.tabs button[aria-selected=true]::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
@@ -152,7 +152,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
   .app{max-width:1280px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto 1fr;
     column-gap:22px;row-gap:12px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
   #v-live{display:flex;grid-column:1;grid-row:1 / span 2}
-  nav.tabs{position:sticky;top:76px;grid-column:2;grid-row:1;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;padding:4px;z-index:5}
+  nav.tabs{position:sticky;top:76px;grid-column:2;grid-row:1;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:12px;padding:4px;z-index:5}
   nav.tabs button{min-height:44px;flex-direction:row;font-size:.85rem;border-radius:8px}
   nav.tabs button[aria-selected=true]{background:var(--soft)}
   nav.tabs button[aria-selected=true]::before{display:none}
@@ -183,6 +183,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
     <button data-go="live" role="tab" aria-selected="true"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Entrevista</button>
     <button data-go="perfil" role="tab" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Perfil</button>
     <button data-go="cv" role="tab" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>Currículo</button>
+    <button data-go="empresa" role="tab" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 21V5l8-2v18M12 8h8v13M8 8v.01M8 12v.01M8 16v.01M16 12v.01M16 16v.01M2 21h20"/></svg>Empresa</button>
     <button data-go="ajustes" role="tab" aria-selected="false"><span class="badge" id="setBadge" hidden></span><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>Ajustes</button>
   </nav>
 
@@ -202,12 +203,13 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
         </div>
       </div>
       <div id="current">
-        <div class="banner" id="welcome">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui, no idioma da pergunta.
+        <div class="banner" id="welcome">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui, no idioma escolhido.
           <ul class="ready" id="ready">
             <li id="rdMic"><span>Microfone</span><span class="st">a verificar…</span></li>
             <li id="rdKey"><span>Chave para gerar respostas</span><span class="st">em falta</span></li>
             <li id="rdCv"><span>Currículo</span><span class="st">em falta</span></li>
             <li id="rdPerfil"><span>Perfil pessoal</span><span class="st">em falta</span></li>
+            <li id="rdEmpresa"><span>Empresa e vaga</span><span class="st">em falta</span></li>
             <li id="rdVoice"><span>A sua voz registada</span><span class="st">em falta</span></li>
           </ul>
         </div>
@@ -256,11 +258,6 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
       <label for="pPractical">Questões práticas (pretensão salarial, disponibilidade, mobilidade)</label><textarea id="pPractical"></textarea>
     </section>
     <section class="panel">
-      <h2>Vaga</h2>
-      <label for="pJob">Descrição da vaga e da empresa</label>
-      <textarea id="pJob" rows="5" placeholder="Cole a descrição da oferta para respostas mais alinhadas."></textarea>
-    </section>
-    <section class="panel">
       <div class="row" style="justify-content:space-between">
         <span class="chip"><span class="dot ok" id="saveDot"></span><span id="saveState">Guardado automaticamente</span></span>
       </div>
@@ -283,6 +280,39 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
       <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden>
       <label for="cvText" style="margin-top:16px">Texto do currículo (pode editar ou colar diretamente)</label>
       <textarea id="cvText" rows="14" placeholder="O texto extraído do currículo aparece aqui."></textarea>
+    </section>
+  </div>
+
+  <!-- ===== EMPRESA ===== -->
+  <div class="view" id="v-empresa" role="tabpanel">
+    <h1>Empresa e vaga</h1>
+    <p class="lead">Usado para responder "porque quer trabalhar aqui?" e "como a sua experiência se aplica a nós?", ligando a empresa ao seu percurso.</p>
+    <section class="panel">
+      <h2>A empresa</h2>
+      <label for="cName">Nome da empresa</label><input type="text" id="cName" placeholder="Ex.: Natura, Nubank, Accenture…">
+      <label for="cWhat">O que faz (setor, produtos ou serviços, clientes, mercados)</label>
+      <textarea id="cWhat" placeholder="Ex.: Banco digital com 100 milhões de clientes no Brasil, México e Colômbia; foco em cartões e crédito."></textarea>
+      <label for="cCulture">Missão, valores e cultura</label>
+      <textarea id="cCulture" placeholder="Ex.: Simplicidade, foco no cliente, trabalho remoto, decisões rápidas."></textarea>
+      <label for="cNews">Momento atual (notícias, projetos, expansão, desafios)</label>
+      <textarea id="cNews" placeholder="Ex.: Está a expandir para o México; lançou um novo produto de investimentos; está a contratar para a área de dados."></textarea>
+      <label for="cPeople">Quem me vai entrevistar (nome, cargo — opcional)</label>
+      <input type="text" id="cPeople" placeholder="Ex.: Ana Souza, gerente de RH; Pedro Lima, head de operações">
+    </section>
+    <section class="panel">
+      <h2>A vaga</h2>
+      <label for="pJob">Descrição da vaga (cole o anúncio)</label>
+      <textarea id="pJob" rows="6" placeholder="Responsabilidades, requisitos, o que oferecem."></textarea>
+    </section>
+    <section class="panel">
+      <h2>A minha ligação</h2>
+      <label for="cWhy">Porque quero trabalhar nesta empresa (nas suas palavras)</label>
+      <textarea id="cWhy" placeholder="Ex.: Uso o produto há anos; quero trabalhar num sítio que cresce rápido; a cultura de autonomia combina comigo."></textarea>
+      <label for="cBridge">Experiências que se ligam a esta empresa ou vaga</label>
+      <textarea id="cBridge" placeholder="Ex.: Na empresa X também lidei com crescimento rápido de clientes; já trabalhei com equipas no México."></textarea>
+      <label for="cNotes">Outras notas ou texto copiado do site da empresa</label>
+      <textarea id="cNotes" rows="5" placeholder="Pode colar aqui o texto da página 'Sobre nós', relatório anual, artigos…"></textarea>
+      <p class="hint">Não precisa de preencher tudo. Quanto mais concreto, melhor: o app escolhe só 1 ou 2 pontos por resposta.</p>
     </section>
   </div>
 
@@ -422,7 +452,7 @@ matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
 
 /* ---------- Gravação automática ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
-const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','provider','groqModel','model','pause','micSel','voiceSens'];
+const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','cName','cWhat','cCulture','cNews','cPeople','cWhy','cBridge','cNotes','engine','provider','groqModel','model','pause','micSel','voiceSens'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
 const CHECKS = ['holdAfter','saveKeys','wake','voiceOn'];
 let saveTimer=null, pendingMic='', ansSize=1.15;
@@ -492,7 +522,7 @@ let wipeArmed=false;
 $('btnWipe').onclick=()=>{
   if(!wipeArmed){ wipeArmed=true; $('btnWipe').textContent='Tocar de novo para apagar'; setTimeout(()=>{wipeArmed=false;$('btnWipe').textContent='Apagar dados';},4000); return; }
   try{ localStorage.removeItem(STORE_KEY); localStorage.removeItem('copiloto'); }catch(e){}
-  ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob',...SECRET].forEach(f=>$(f).value='');
+  ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','cName','cWhat','cCulture','cNews','cPeople','cWhy','cBridge','cNotes',...SECRET].forEach(f=>$(f).value='');
   cvDropState(); wipeArmed=false; $('btnWipe').textContent='Apagar dados'; $('saveState').textContent='Dados apagados'; readiness();
 };
 
@@ -513,6 +543,7 @@ function readiness(){
   setReady('rdKey',keysOk,'pronto ✓',['Configurar',()=>go('ajustes')]);
   setReady('rdCv',$('cvText').value.trim().length>30,'carregado ✓',['Carregar',()=>go('cv')]);
   setReady('rdPerfil',!!($('pAbout').value.trim()||$('pGoals').value.trim()),'preenchido ✓',['Preencher',()=>go('perfil')]);
+  setReady('rdEmpresa',!!($('cName').value.trim()&&($('cWhat').value.trim()||$('pJob').value.trim()||$('cNotes').value.trim())),'preenchido ✓',['Preencher',()=>go('empresa')]);
   if($('rdVoice')){
     if(!$('voiceOn').checked) setReady('rdVoice',true,'desligado',null);
     else setReady('rdVoice',!!voiceProfile,'pronto ✓',['Gravar',()=>{ go('ajustes'); $('voiceSec').scrollIntoView({block:'start'}); }]);
@@ -982,7 +1013,10 @@ CONTEÚDO
   • PESSOAL — personalidade, valores, hobbies, objetivos, pontos fortes e fracos, salário, disponibilidade: os factos vêm do PERFIL PESSOAL.
   • PROFISSIONAL — experiência, competências, projetos, resultados, formação, porquê esta vaga, situações comportamentais: os factos vêm do CURRÍCULO.
 - Nunca inventes empresas, cargos, números ou experiências. Se faltar informação, responde de forma honesta e marca entre [colchetes] o que o candidato deve completar.
-- Liga a resposta à VAGA quando fizer sentido.
+- PORQUÊ ESTA EMPRESA ("Porque quer trabalhar aqui?", "O que sabe sobre nós?", "Porque esta vaga?", "Why us?"): junta 1 ou 2 factos CONCRETOS da EMPRESA (o que faz, momento atual, cultura) com as motivações reais do candidato ("Porque quero trabalhar aqui") e com algo do percurso dele que torne essa motivação credível. Nada de elogios genéricos ("empresa de referência", "líder de mercado") nem de repetir a missão palavra por palavra. Mostra que a pessoa percebe o que a empresa está a viver agora.
+- TRANSFERIR EXPERIÊNCIA ("Como a sua experiência se aplica aqui?", "O que traria para a equipa?", "Como faria isto na nossa empresa?", "Não tem experiência no nosso setor, porquê você?"): pega em 1 ou 2 experiências do CURRÍCULO (usa "Experiências que se ligam" se existir) e liga-as a um desafio ou necessidade real da EMPRESA ou da VAGA. Explica em linguagem simples o que é igual entre as duas situações e o que o candidato faria nos primeiros meses. Se o setor for diferente, assume-o com naturalidade e mostra o que se aproveita.
+- Nas outras respostas profissionais, quando encaixar de forma natural, podes fazer uma ponte curta com a empresa ou a vaga (uma frase). Não forces em todas as respostas.
+- Se o nome de quem entrevista estiver indicado, não o uses em todas as respostas; no máximo de vez em quando, de forma natural.
 - Se for uma pergunta de seguimento ("e porquê?", "pode dar um exemplo?", "e o resultado?"), responde no contexto da CONVERSA ATÉ AGORA, sem repetir o que já foi dito.
 
 ESTILO — o mais importante
@@ -1018,8 +1052,20 @@ Pontos fortes / a melhorar: ${v('pStrengths')}
 Vida pessoal: ${v('pPersonal')}
 Questões práticas: ${v('pPractical')}
 
+=== EMPRESA ===
+Nome: ${v('cName')}
+O que faz: ${v('cWhat')}
+Missão, valores e cultura: ${v('cCulture')}
+Momento atual: ${v('cNews')}
+Entrevistadores: ${v('cPeople')}
+Notas / texto do site: ${$('cNotes').value.trim().slice(0,cvLimit<20000?3000:8000)||'(não informado)'}
+
+=== LIGAÇÃO DO CANDIDATO À EMPRESA ===
+Porque quero trabalhar aqui: ${v('cWhy')}
+Experiências que se ligam: ${v('cBridge')}
+
 === VAGA ===
-${v('pJob')}`;
+${v('pJob').slice(0,cvLimit<20000?4000:10000)}`;
 }
 function archive(card){
   card.classList.remove('current');
