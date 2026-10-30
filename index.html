@@ -127,8 +127,9 @@ details summary{cursor:pointer;font-weight:600;font-size:.9rem}
     <h2>3 · Configuração</h2>
     <label for="engine">Motor de transcrição</label>
     <select id="engine">
-      <option value="browser">Navegador (gratuito, Chrome/Edge)</option>
-      <option value="whisper">Whisper — OpenAI (deteta idioma e sotaque automaticamente)</option>
+      <option value="browser">Navegador (grátis, Chrome/Edge)</option>
+      <option value="whisper-groq">Whisper — Groq (grátis, deteta idioma e sotaque)</option>
+      <option value="whisper-openai">Whisper — OpenAI (pago)</option>
     </select>
     <div id="langBox">
       <label for="lang">Idioma / sotaque esperado</label>
@@ -142,17 +143,36 @@ details summary{cursor:pointer;font-weight:600;font-size:.9rem}
       </select>
       <p class="hint">No modo Navegador, escolha um idioma. Pode trocar durante a entrevista. Para mistura de idiomas e sotaques variados, use o Whisper.</p>
     </div>
+    <label for="provider">Quem gera as respostas</label>
+    <select id="provider">
+      <option value="groq" selected>Groq (grátis, sem cartão)</option>
+      <option value="anthropic">Claude — Anthropic (pago, respostas mais elaboradas)</option>
+    </select>
+    <div id="groqBox">
+      <label for="groqKey">Chave API Groq</label><input type="password" id="groqKey" placeholder="gsk_...">
+      <p class="hint">Crie grátis em console.groq.com → API Keys. A mesma chave serve para as respostas e para o Whisper — Groq.</p>
+    </div>
+    <div id="groqModelBox">
+      <label for="groqModel">Modelo (Groq)</label>
+      <select id="groqModel">
+        <option value="meta-llama/llama-4-scout-17b-16e-instruct" selected>Llama 4 Scout (rápido, aceita currículos longos)</option>
+        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (bom em português)</option>
+        <option value="openai/gpt-oss-120b">GPT-OSS 120B (mais elaborado)</option>
+      </select>
+    </div>
     <div id="openaiBox" hidden>
       <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-...">
     </div>
-    <label for="claudeKey">Chave API Anthropic (Claude) — para gerar respostas</label>
-    <input type="password" id="claudeKey" placeholder="sk-ant-...">
-    <label for="model">Modelo</label>
-    <select id="model">
-      <option value="claude-haiku-5-5">Claude Haiku 5.5 (mais rápido)</option>
-      <option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5 (equilibrado)</option>
-      <option value="claude-opus-5-5">Claude Opus 5.5 (mais elaborado)</option>
-    </select>
+    <div id="claudeBox" hidden>
+      <label for="claudeKey">Chave API Anthropic (Claude)</label>
+      <input type="password" id="claudeKey" placeholder="sk-ant-...">
+      <label for="model">Modelo (Claude)</label>
+      <select id="model">
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 (mais rápido)</option>
+        <option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5 (equilibrado)</option>
+        <option value="claude-opus-5-5">Claude Opus 5.5 (mais elaborado)</option>
+      </select>
+    </div>
     <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,6 s</span></label>
     <input type="range" id="pause" min="0.8" max="4" step="0.1" value="1.6" style="width:100%">
     <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo (retome com o botão ou a tecla Espaço)</label>
@@ -198,8 +218,8 @@ const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const IS_MOBILE=IS_ANDROID||/iPhone|iPad|iPod/i.test(navigator.userAgent);
 /* ---------- Gravação automática do formulário ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
-const FIELDS = ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','model','pause','micSel'];
-const SECRET = ['openaiKey','claudeKey'];
+const FIELDS = ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','provider','groqModel','model','pause','micSel'];
+const SECRET = ['openaiKey','claudeKey','groqKey'];
 const CHECKS = ['holdAfter','saveKeys'];
 let saveTimer=null, pendingMic='';
 const store = {
@@ -351,7 +371,17 @@ checkMicPermission();
 
 /* ---------- UI helpers ---------- */
 function setStatus(t,on){ $('statusTxt').textContent=t; $('dot').classList.toggle('on',!!on); }
-function syncEngine(){ const w=$('engine').value==='whisper'; $('openaiBox').hidden=!w; $('langBox').hidden=w; }
+function syncEngine(){
+  if(!$('engine').value) $('engine').value='whisper-openai';   // valor antigo "whisper"
+  if(!$('provider').value) $('provider').value='groq';
+  const eng=$('engine').value, prov=$('provider').value;
+  $('langBox').hidden = eng!=='browser';
+  $('openaiBox').hidden = eng!=='whisper-openai';
+  $('groqBox').hidden = !(eng==='whisper-groq' || prov==='groq');
+  $('groqModelBox').hidden = prov!=='groq';
+  $('claudeBox').hidden = prov!=='anthropic';
+}
+$('provider').addEventListener('change',syncEngine);
 $('engine').addEventListener('change',()=>{ syncEngine(); if(listening){ stopListening(); startListening(); } });
 $('lang').addEventListener('change',()=>{ if(listening && recog){ recog.stop(); } });
 syncEngine();
@@ -456,7 +486,7 @@ async function startMeter(){
     analyser.getFloatTimeDomainData(buf);
     let s=0; for(const v of buf) s+=v*v; const rms=Math.sqrt(s/buf.length);
     $('level').style.width=Math.min(100,rms*600)+'%';
-    if($('engine').value==='whisper') whisperVAD(rms);
+    if($('engine').value.startsWith('whisper')) whisperVAD(rms);
     rafId=requestAnimationFrame(tick);
   };
   tick();
@@ -470,13 +500,16 @@ function whisperVAD(rms){
 async function sendWhisper(){
   const blob=new Blob(chunks,{type:mrec.mimeType||'audio/webm'});
   if(blob.size<6000){ interimText=''; renderTranscript(); return; }
-  const key=$('openaiKey').value.trim();
-  if(!key){ alertBanner('Introduza a chave API OpenAI para usar o Whisper.'); return; }
+  const groq=$('engine').value==='whisper-groq';
+  const key=(groq?$('groqKey'):$('openaiKey')).value.trim();
+  if(!key){ interimText=''; renderTranscript(); alertBanner('Introduza a chave API '+(groq?'Groq':'OpenAI')+' na Configuração para usar o Whisper.'); return; }
   interimText='(a transcrever…)'; renderTranscript();
-  const fd=new FormData(); fd.append('file',blob,'audio.webm'); fd.append('model','whisper-1');
+  const fd=new FormData(); fd.append('file',blob,'audio.webm'); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
   fd.append('prompt','Entrevista de emprego / job interview. Português e English.');
+  const url=groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions';
   try{
-    const r=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+    const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+    if(r.status===429){ interimText=''; renderTranscript(); alertBanner('Limite gratuito do Groq atingido por agora. Espere um minuto ou mude o motor para Navegador.'); return; }
     const j=await r.json(); interimText='';
     if(!r.ok) throw new Error(j.error?.message||r.status);
     addFinal(j.text||'');
@@ -492,7 +525,7 @@ async function startListening(){
   }
   // No telemóvel o microfone só pode ter um utilizador de cada vez: no motor Navegador
   // deixamos o microfone só para o reconhecimento de voz (sem medidor de nível).
-  const needMeter = $('engine').value==='whisper' || !IS_MOBILE;
+  const needMeter = $('engine').value.startsWith('whisper') || !IS_MOBILE;
   if(needMeter){ try{ await startMeter(); }catch(e){ alertBanner('Não foi possível aceder ao microfone: '+e.message); return; } }
   listening=true;
   if($('engine').value==='browser' && !startBrowser()){ stopListening(); return; }
@@ -522,8 +555,10 @@ function alertBanner(msg){ const c=$('current'); c.className='banner'; c.textCon
 let busy=false, abortCtl=null;
 async function maybeAnswer(text,forced){
   if(!forced && !looksLikeQuestion(text)) return;
-  const key=$('claudeKey').value.trim();
-  if(!key){ alertBanner('Introduza a chave API Anthropic na Configuração para gerar respostas.'); return; }
+  const prov=$('provider').value;
+  const key=(prov==='groq'?$('groqKey'):$('claudeKey')).value.trim();
+  if(!key){ alertBanner('Introduza a chave API '+(prov==='groq'?'Groq (grátis em console.groq.com)':'Anthropic')+' na Configuração para gerar respostas.'); return; }
+  const streamFn = prov==='groq' ? streamGroq : streamClaude;
   if(abortCtl) abortCtl.abort();
   // move texto para "tratado"
   if(finalText){ doneText+=(doneText?'\n':'')+'[entrevistador] '+finalText.trim(); finalText=''; renderTranscript(); }
@@ -531,14 +566,34 @@ async function maybeAnswer(text,forced){
   abortCtl=new AbortController();
   try{
     let raw='';
-    await streamClaude(key, buildSystem(), text, abortCtl.signal, delta=>{ raw+=delta; paint(card,raw,false); });
+    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, abortCtl.signal, delta=>{ raw+=delta; paint(card,raw,false); });
     paint(card,raw,true);
     if($('holdAfter').checked && card.dataset.type!=='nao') setHold(true);
   }catch(err){
     if(err.name!=='AbortError') card.querySelector('.ans').textContent='Erro: '+err.message;
   }
 }
-function buildSystem(){
+async function streamGroq(key,system,user,signal,onDelta){
+  const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    method:'POST',signal,
+    headers:{'content-type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify({model:$('groqModel').value,max_tokens:700,temperature:0.5,stream:true,
+      messages:[{role:'system',content:system},{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})
+  });
+  if(r.status===429) throw new Error('Limite gratuito do Groq atingido por agora. Espere cerca de um minuto, ou escolha outro modelo Groq na Configuração.');
+  if(!r.ok){ let m=r.status; try{ m=(await r.json()).error?.message||m }catch(e){} throw new Error(m); }
+  const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
+  for(;;){
+    const {done,value}=await rd.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split('\n'); buf=lines.pop();
+    for(const l of lines){
+      if(!l.startsWith('data:')) continue; const d=l.slice(5).trim(); if(d==='[DONE]') return;
+      try{ const ev=JSON.parse(d); const t=ev.choices?.[0]?.delta?.content; if(t) onDelta(t); }catch(e){}
+    }
+  }
+}
+function buildSystem(cvLimit=20000){
   const v=id=>$(id).value.trim()||'(não informado)';
   return `És um copiloto discreto para uma ENTREVISTA DE EMPREGO. Ouves a pergunta do entrevistador (transcrita automaticamente, pode ter erros de reconhecimento e sotaques variados — interpreta a intenção) e sugeres o que o CANDIDATO deve responder, na primeira pessoa, como se fosse ele a falar.
 
@@ -556,7 +611,7 @@ TIPO: profissional | pessoal | nao ; IDIOMA: pt | en ; PERGUNTA: <pergunta refor
 Depois uma linha em branco e a resposta.
 
 === CURRÍCULO ===
-${v('cvText').slice(0,20000)}
+${v('cvText').slice(0,cvLimit)}
 
 === PERFIL PESSOAL ===
 Nome: ${v('pName')}
