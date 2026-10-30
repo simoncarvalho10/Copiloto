@@ -759,9 +759,9 @@ async function translateEntry(e){
   try{
     let out='';
     if(gk){
-      for(const model of ['llama-3.1-8b-instant','openai/gpt-oss-20b','llama-3.3-70b-versatile']){
+      for(const model of ['llama-3.1-8b-instant','openai/gpt-oss-20b']){
         const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+gk},
-          body:JSON.stringify({model,temperature:0,max_tokens:300,messages:[{role:'system',content:sys},{role:'user',content:e.text}]})});
+          body:JSON.stringify(Object.assign({model,temperature:0,max_tokens:model.includes('gpt-oss')?600:300,messages:[{role:'system',content:sys},{role:'user',content:e.text}]},model.includes('gpt-oss')?{reasoning_effort:'low'}:{}))});
         if(!r.ok) continue;
         out=(await r.json()).choices?.[0]?.message?.content||''; break;
       }
@@ -1082,7 +1082,7 @@ async function maybeAnswer(text,forced){
   const attach=()=>{ if(attached) return; attached=true; showCard(card); liveMsg(''); };
   liveMsg('A preparar a resposta…','busy');
   try{
-    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, ctl.signal, d=>{
+    await streamFn(key, prov==='groq' ? (B=>buildSystem(B)) : buildSystem(BUDGETS.claude), text, ctl.signal, d=>{
       raw+=d; const res=paint(card,raw,false);
       if(res && res.type && res.type!=='nao') attach();
     });
@@ -1107,26 +1107,43 @@ async function readSSE(r,onData){
   }
 }
 async function errorOf(r){ let m='erro '+r.status; try{ m=(await r.json()).error?.message||m; }catch(e){} return new Error(m); }
-async function streamGroq(key,system,user,signal,onDelta){
-  // Tenta o modelo escolhido; se o Groq o tiver retirado, passa para o próximo da lista e guarda a troca.
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function streamGroq(key,sysFn,user,signal,onDelta){
   const sel=$('groqModel');
   const order=[sel.value,...[...sel.options].map(o=>o.value).filter(v=>v!==sel.value)];
-  let lastErr=null;
+  const dead=new Set(); let lastErr=null;
   for(const model of order){
-    const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal,
-      headers:{'content-type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model,max_tokens:600,temperature:0.7,stream:true,
-        messages:[{role:'system',content:system},{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
-    if(r.status===401) throw new Error('Chave Groq inválida. Confirme em Ajustes (começa por gsk_).');
-    if(r.status===429){ lastErr=new Error('Limite gratuito do Groq atingido por agora. Espere cerca de um minuto, ou escolha outro modelo em Ajustes.'); continue; }
-    if(!r.ok){
-      const err=await errorOf(r);
-      if(r.status===404 || /does not exist|decommissioned|not found|no access/i.test(err.message)){ lastErr=err; continue; }
-      throw err;
+    let nextModel=false;
+    for(const size of ['groq','small']){
+      let waited=false;
+      for(;;){
+        const oss=model.startsWith('openai/gpt-oss');
+        const body={model, max_tokens:oss?1400:600, temperature:0.7, stream:true,
+          messages:[{role:'system',content:sysFn(BUDGETS[size])},{role:'user',content:'Transcrição do entrevistador:\n+user+'}]};
+        if(oss) body.reasoning_effort='low';
+        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal,
+          headers:{'content-type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(body)});
+        if(r.status===401) throw new Error('Chave Groq inválida. Confirme em Ajustes (começa por gsk_).');
+        if(r.ok){
+          if(dead.has(sel.value)){ sel.value=model; store.save(); }   // só troca de vez se o modelo escolhido já não existir
+          let got=false;
+          await readSSE(r,ev=>{ const t=ev.choices?.[0]?.delta?.content; if(t){ got=true; onDelta(t); } });
+          if(got) return;
+          lastErr=new Error('O modelo '+model+' devolveu uma resposta vazia.'); nextModel=true; break;
+        }
+        const err=await errorOf(r), msg=err.message||'';
+        if(r.status===404 || /does not exist|decommissioned|not found|no access/i.test(msg)){ dead.add(model); lastErr=err; nextModel=true; break; }
+        if(r.status===413 || /too large|reduce your message|context.length/i.test(msg)){ lastErr=err; break; }   // tenta com menos contexto
+        if(r.status===429){
+          const ra=parseFloat(r.headers.get('retry-after')||'') || parseFloat((msg.match(/try again in ([\d.]+)s/i)||[])[1]||'');
+          if(!waited && ra>0 && ra<=4){ waited=true; liveMsg('Limite por minuto do Groq — a tentar de novo em '+Math.ceil(ra)+' s…','busy'); await sleep(ra*1000+150); continue; }
+          lastErr=new Error('Limite gratuito do Groq atingido por agora'+(ra?' (liberta em cerca de '+Math.ceil(ra)+' s)':'')+'.');
+          break;                                                   // tenta com menos contexto, depois outro modelo
+        }
+        throw err;
+      }
+      if(nextModel) break;
     }
-    if(model!==sel.value){ sel.value=model; store.save(); }
-    await readSSE(r,ev=>{ const t=ev.choices?.[0]?.delta?.content; if(t) onDelta(t); });
-    return;
   }
   throw lastErr||new Error('Nenhum modelo Groq disponível de momento.');
 }
@@ -1142,17 +1159,25 @@ function langName(){
   return {'en-US':'inglês dos Estados Unidos (American English)','en-GB':'inglês britânico (British English)','en-IN':'inglês (Indian English, claro e neutro)',
     'en-AU':'inglês australiano (Australian English)','pt-BR':'português do Brasil','pt-PT':'português europeu (de Portugal)'}[$('lang').value]||'inglês dos Estados Unidos';
 }
-function buildSystem(cvLimit=20000){
-  const v=id=>$(id).value.trim()||'(não informado)';
+// Quanto texto vai em cada pedido. O plano grátis do Groq limita os tokens por minuto,
+// por isso o Groq recebe menos contexto e, se for preciso, uma versão ainda mais curta.
+const BUDGETS={
+  claude:{cv:20000, job:10000, notes:8000, sideMax:1200, mem:6, memLen:450},
+  groq:  {cv:5000,  job:1500,  notes:800,  sideMax:350,  mem:4, memLen:280},
+  small: {cv:2500,  job:700,   notes:0,    sideMax:180,  mem:2, memLen:160}
+};
+function buildSystem(B=BUDGETS.claude){
+  if(typeof B==='number') B=B>=20000?BUDGETS.claude:BUDGETS.groq;
+  const v=(id,max)=>{ const t=$(id).value.trim(); return t ? (max? t.slice(0,max) : t) : '(não informado)'; };
   const isEN=$('lang').value.startsWith('en');
   const gist=isEN && $('gistOn').checked;
   const lvl={'B1':{name:'B1 (intermediário)',max:10,min:35,words:65},'B1-B2':{name:'B1–B2 (intermediário)',max:12,min:40,words:80},
              'B2':{name:'B2 (intermediário avançado)',max:15,min:45,words:95},'C1':{name:'C1 (avançado)',max:20,min:50,words:110}}[isEN?$('level').value:'C1']
            ||{name:'B1–B2',max:12,min:40,words:80};
-  const recent=qaLog.slice(-6), older=qaLog.slice(0,-6);
+  const recent=B.mem?qaLog.slice(-B.mem):[], older=B.mem?qaLog.slice(0,-B.mem):qaLog.slice();
   const hist=qaLog.length
-    ? (older.length?'Perguntas mais antigas (resumo): '+older.map(x=>x.q+(x.rem?' ['+x.rem+']':'')).join(' | ')+'\n\n':'')
-      + recent.map((x,i)=>`P${older.length+i+1}: ${x.q}\nResposta sugerida: ${x.a}`).join('\n\n')
+    ? (older.length?'Perguntas mais antigas (resumo): '+older.map(x=>x.q+(x.rem?' ['+x.rem+']':'')).join(' | ').slice(-(B===BUDGETS.claude?2000:600))+'\n\n':'')
+      + recent.map((x,i)=>`P${older.length+i+1}: ${x.q}\nResposta sugerida: ${x.a.slice(0,B.memLen)}`).join('\n\n')
     : '(início da entrevista)';
   const topics=[...new Set(qaLog.flatMap(x=>(x.rem||'').split(/[·,;]/).map(t=>t.trim()).filter(Boolean)))].join(', ')||'(nenhum ainda)';
   const opens=[...new Set(qaLog.filter(x=>x.type!=='social').map(x=>x.open))].join(' | ')||'(nenhuma ainda)';
@@ -1217,31 +1242,31 @@ TEMAS JÁ USADOS: ${topics}
 ABERTURAS JÁ USADAS: ${opens}
 
 === CURRÍCULO (fonte de factos, não de frases) ===
-${v('cvText').slice(0,cvLimit)}
+${v('cvText',B.cv)}
 
 === PERFIL PESSOAL ===
 Nome: ${v('pName')}
 Dados básicos: ${v('pBasics')}
-Sobre mim: ${v('pAbout')}
-Objetivos de carreira: ${v('pGoals')}
-Pontos fortes / a melhorar: ${v('pStrengths')}
-Vida pessoal: ${v('pPersonal')}
-Questões práticas: ${v('pPractical')}
+Sobre mim: ${v('pAbout',B.sideMax)}
+Objetivos de carreira: ${v('pGoals',B.sideMax)}
+Pontos fortes / a melhorar: ${v('pStrengths',B.sideMax)}
+Vida pessoal: ${v('pPersonal',B.sideMax)}
+Questões práticas: ${v('pPractical',B.sideMax)}
 
 === EMPRESA ===
 Nome: ${v('cName')}
-O que faz: ${v('cWhat')}
-Missão, valores e cultura: ${v('cCulture')}
-Momento atual: ${v('cNews')}
+O que faz: ${v('cWhat',B.sideMax)}
+Missão, valores e cultura: ${v('cCulture',B.sideMax)}
+Momento atual: ${v('cNews',B.sideMax)}
 Entrevistadores: ${v('cPeople')}
-Notas / texto do site: ${$('cNotes').value.trim().slice(0,cvLimit<20000?3000:8000)||'(não informado)'}
+Notas / texto do site: ${B.notes? v('cNotes',B.notes) : '(omitido)'}
 
 === LIGAÇÃO DO CANDIDATO À EMPRESA ===
-Porque quero trabalhar aqui: ${v('cWhy')}
-Experiências que se ligam: ${v('cBridge')}
+Porque quero trabalhar aqui: ${v('cWhy',B.sideMax)}
+Experiências que se ligam: ${v('cBridge',B.sideMax)}
 
 === VAGA ===
-${v('pJob').slice(0,cvLimit<20000?4000:10000)}`;
+${v('pJob',B.job)}`;
 }
 function archive(card){
   card.classList.remove('current');
