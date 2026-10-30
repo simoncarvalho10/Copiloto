@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copiloto de Entrevista</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+/* Layout: duas colunas — esquerda = perfil/CV/config, direita = ao vivo (transcrição + sugestão) */
+:root{
+  --bg:#f3f4f1; --panel:#ffffff; --ink:#1b2320; --muted:#5d6a64; --line:#d9ded9;
+  --accent:#1f7a5c; --accent-ink:#ffffff; --live:#c0392b; --pro:#2457a6; --pes:#8a5a12; --soft:#e8efeb;
+  --display:"Instrument Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121614; --panel:#1a201d; --ink:#e7ece9; --muted:#97a59e; --line:#2c3531;
+  --accent:#4cc79a; --accent-ink:#0d1411; --live:#ff6b5b; --pro:#7fa8ec; --pes:#e0b065; --soft:#212a26;
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--display);padding:20px max(16px,env(safe-area-inset-left)) 40px max(16px,env(safe-area-inset-right))}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;max-width:1280px;margin:0 auto 18px}
+h1{font-size:1.45rem;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:.8rem;font-weight:400;color:var(--muted)}
+h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;font-weight:600}
+.grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px;max-width:1280px;margin:0 auto}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+label{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=password],select,textarea{width:100%;font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+textarea{resize:vertical;min-height:70px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;font-weight:600;font-size:.9rem;border-radius:6px;border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:8px 14px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.rec{background:var(--live);color:#fff;border-color:var(--live)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.drop{border:1.5px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:.85rem;cursor:pointer}
+.drop.ok{border-color:var(--accent);color:var(--ink)}
+.status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.dot.on{background:var(--live);animation:pulse 1.2s infinite}
+.dot.ok{background:var(--accent)} .dot.bad{background:var(--live)}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot.on{animation:none}}
+.meter{height:4px;background:var(--line);border-radius:2px;overflow:hidden;flex:1;min-width:80px}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .08s}
+#transcript{font-size:1rem;min-height:120px;max-height:260px;overflow:auto;white-space:pre-wrap}
+#transcript .done{color:var(--muted)}
+#transcript .interim{color:var(--muted);font-style:italic}
+.card{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--panel)}
+.card.current{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.q{font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-right:6px;border:1px solid currentColor}
+.tag.pro{color:var(--pro)} .tag.pes{color:var(--pes)} .tag.lang{color:var(--muted)}
+.ans{white-space:pre-wrap;font-size:1.02rem}
+.ans strong{color:var(--accent)}
+#history{display:flex;flex-direction:column;gap:12px}
+.hint{font-size:.8rem;color:var(--muted)}
+#micHint{white-space:pre-line;color:var(--ink)}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:.85rem;margin-top:10px;color:var(--ink)}
+.check input{margin-top:3px}
+.banner{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:.85rem}
+details summary{cursor:pointer;font-weight:600;font-size:.9rem}
+.mono{font-family:var(--mono);font-size:.78rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Copiloto de Entrevista<small>Transcrição ao vivo (PT/EN) e respostas sugeridas com base no seu perfil e currículo</small></h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Parado</span></div>
+</header>
+
+<div class="grid">
+<div class="col">
+  <section id="micSec">
+    <h2>Microfone</h2>
+    <div class="row" style="justify-content:space-between">
+      <div class="status"><span class="dot" id="micDot"></span><span id="micState">A verificar permissão…</span></div>
+      <button class="primary" id="btnMic">Permitir microfone</button>
+    </div>
+    <label for="micSel">Dispositivo de entrada</label>
+    <select id="micSel"><option value="">Padrão do sistema</option></select>
+    <div class="row" style="margin-top:10px">
+      <button id="btnTest">Testar microfone</button>
+      <div class="meter" title="Nível do teste"><i id="testLevel"></i></div>
+    </div>
+    <p class="hint" id="micHint"></p>
+  </section>
+
+  <section>
+    <h2>1 · Currículo</h2>
+    <div class="drop" id="drop" tabindex="0">Arraste o currículo aqui ou clique para escolher<br><span class="mono">PDF · DOCX · TXT</span></div>
+    <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md" hidden>
+    <details style="margin-top:10px"><summary>Ver / editar texto do currículo</summary>
+      <textarea id="cvText" rows="8" placeholder="O texto extraído do currículo aparece aqui. Pode também colar diretamente."></textarea>
+    </details>
+  </section>
+
+  <section>
+    <h2>2 · Perfil pessoal</h2>
+    <label for="pName">Nome</label><input type="text" id="pName">
+    <label for="pAbout">Sobre mim (personalidade, valores, motivações)</label>
+    <textarea id="pAbout" placeholder="Ex.: Sou organizado, gosto de resolver problemas complexos, valorizo trabalho em equipa..."></textarea>
+    <label for="pGoals">Objetivos de carreira</label><textarea id="pGoals"></textarea>
+    <label for="pStrengths">Pontos fortes / a melhorar</label><textarea id="pStrengths"></textarea>
+    <label for="pPersonal">Vida pessoal (hobbies, onde vive, família — só o que quiser partilhar)</label><textarea id="pPersonal"></textarea>
+    <label for="pPractical">Questões práticas (pretensão salarial, disponibilidade, mobilidade)</label><textarea id="pPractical"></textarea>
+    <label for="pJob">Vaga / empresa (descrição da oferta)</label><textarea id="pJob" placeholder="Cole a descrição da vaga para respostas mais alinhadas."></textarea>
+    <div class="row" style="margin-top:14px;justify-content:space-between">
+      <span class="status"><span class="dot ok" id="saveDot"></span><span id="saveState">Guardado automaticamente</span></span>
+      <div class="row">
+        <button id="btnExport" title="Descarregar uma cópia de segurança do perfil">Exportar</button>
+        <button id="btnImport" title="Carregar uma cópia de segurança">Importar</button>
+        <button id="btnWipe">Apagar dados</button>
+      </div>
+    </div>
+    <input type="file" id="importFile" accept=".json" hidden>
+  </section>
+
+  <section>
+    <h2>3 · Configuração</h2>
+    <label for="engine">Motor de transcrição</label>
+    <select id="engine">
+      <option value="browser">Navegador (gratuito, Chrome/Edge)</option>
+      <option value="whisper">Whisper — OpenAI (deteta idioma e sotaque automaticamente)</option>
+    </select>
+    <div id="langBox">
+      <label for="lang">Idioma / sotaque esperado</label>
+      <select id="lang">
+        <option value="pt-BR">Português (Brasil)</option>
+        <option value="pt-PT">Português (Portugal)</option>
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="en-AU">English (Australia)</option>
+      </select>
+      <p class="hint">No modo Navegador, escolha um idioma. Pode trocar durante a entrevista. Para mistura de idiomas e sotaques variados, use o Whisper.</p>
+    </div>
+    <div id="openaiBox" hidden>
+      <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-...">
+    </div>
+    <label for="claudeKey">Chave API Anthropic (Claude) — para gerar respostas</label>
+    <input type="password" id="claudeKey" placeholder="sk-ant-...">
+    <label for="model">Modelo</label>
+    <select id="model">
+      <option value="claude-haiku-5-5">Claude Haiku 5.5 (mais rápido)</option>
+      <option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5 (equilibrado)</option>
+      <option value="claude-opus-5-5">Claude Opus 5.5 (mais elaborado)</option>
+    </select>
+    <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,6 s</span></label>
+    <input type="range" id="pause" min="0.8" max="4" step="0.1" value="1.6" style="width:100%">
+    <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo (retome com o botão ou a tecla Espaço)</label>
+    <label class="check"><input type="checkbox" id="saveKeys" checked> Guardar também as chaves API neste navegador</label>
+    <p class="hint">O perfil, o currículo e as preferências são guardados automaticamente enquanto escreve. As chaves ficam apenas neste computador e só são enviadas para a OpenAI/Anthropic.</p>
+  </section>
+</div>
+
+<div class="col">
+  <section>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <div class="row">
+        <button class="primary" id="btnStart">● Iniciar escuta</button>
+        <button id="btnResume" disabled>Retomar deteção</button>
+        <button id="btnNow">Sugerir agora</button>
+        <button id="btnClear">Limpar</button>
+      </div>
+      <div class="meter" title="Nível do microfone"><i id="level"></i></div>
+    </div>
+    <h2>Transcrição</h2>
+    <div id="transcript" aria-live="polite"><span class="hint">A transcrição aparece aqui quando iniciar a escuta.</span></div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="manualQ" placeholder="Ou escreva/cole uma pergunta para testar…" style="flex:1;min-width:0">
+      <button id="btnAsk">Perguntar</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Resposta sugerida</h2>
+    <div id="current" class="banner">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui — no idioma da pergunta.</div>
+  </section>
+
+  <section>
+    <h2>Histórico da entrevista</h2>
+    <div id="history"><span class="hint">Sem perguntas ainda.</span></div>
+  </section>
+</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const IS_ANDROID=/Android/i.test(navigator.userAgent);
+const IS_MOBILE=IS_ANDROID||/iPhone|iPad|iPod/i.test(navigator.userAgent);
+/* ---------- Gravação automática do formulário ---------- */
+const STORE_KEY='copiloto-entrevista-v2';
+const FIELDS = ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','model','pause','micSel'];
+const SECRET = ['openaiKey','claudeKey'];
+const CHECKS = ['holdAfter','saveKeys'];
+let saveTimer=null, pendingMic='';
+const store = {
+  collect(withKeys){
+    const d={savedAt:new Date().toISOString()};
+    FIELDS.forEach(f=>d[f]=$(f).value);
+    CHECKS.forEach(f=>d[f]=$(f).checked);
+    if(withKeys) SECRET.forEach(f=>d[f]=$(f).value);
+    return d;
+  },
+  apply(d){
+    FIELDS.forEach(f=>{ if(d[f]!=null) $(f).value=d[f]; });
+    CHECKS.forEach(f=>{ if(typeof d[f]==='boolean') $(f).checked=d[f]; });
+    SECRET.forEach(f=>{ if(d[f]) $(f).value=d[f]; });
+    pendingMic=d.micSel||'';
+    if(d.cvText){ $('drop').classList.add('ok'); $('drop').textContent='Currículo carregado ✓ (clique para trocar)'; }
+  },
+  load(){
+    try{ const raw=localStorage.getItem(STORE_KEY)||localStorage.getItem('copiloto');
+      if(raw){ const d=JSON.parse(raw); this.apply(d); this.mark(true,d.savedAt); } }
+    catch(e){ this.mark(false); }
+  },
+  save(){
+    try{ localStorage.setItem(STORE_KEY,JSON.stringify(this.collect($('saveKeys').checked))); localStorage.removeItem('copiloto'); this.mark(true); }
+    catch(e){ this.mark(false); }
+  },
+  mark(ok,when){
+    $('saveDot').className='dot '+(ok?'ok':'bad');
+    if(!ok){ $('saveState').textContent='Não foi possível guardar neste navegador — use Exportar'; return; }
+    const t=when?new Date(when):new Date();
+    $('saveState').textContent='Guardado às '+t.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  },
+  soon(){ $('saveState').textContent='A guardar…'; clearTimeout(saveTimer); saveTimer=setTimeout(()=>this.save(),400); }
+};
+[...FIELDS,...SECRET,...CHECKS].forEach(f=>{ $(f).addEventListener('input',()=>store.soon()); $(f).addEventListener('change',()=>store.save()); });
+window.addEventListener('beforeunload',()=>store.save());
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) store.save(); });
+store.load();
+
+$('btnExport').onclick=()=>{
+  const d=store.collect(false); // a cópia de segurança nunca inclui as chaves
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));
+  a.download='perfil-entrevista-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+$('btnImport').onclick=()=>$('importFile').click();
+$('importFile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ store.apply(JSON.parse(await f.text())); store.save(); syncEngine(); fmtPause(); selectMic(); }
+  catch(err){ alertBanner('Ficheiro inválido: '+err.message); }
+  e.target.value='';
+};
+let wipeArmed=false;
+$('btnWipe').onclick=()=>{
+  if(!wipeArmed){ wipeArmed=true; $('btnWipe').textContent='Confirmar apagar?'; setTimeout(()=>{wipeArmed=false;$('btnWipe').textContent='Apagar dados';},4000); return; }
+  try{ localStorage.removeItem(STORE_KEY); localStorage.removeItem('copiloto'); }catch(e){}
+  [...FIELDS.filter(f=>!['engine','lang','model','pause','micSel'].includes(f)),...SECRET].forEach(f=>$(f).value='');
+  $('drop').classList.remove('ok'); $('drop').innerHTML='Arraste o currículo aqui ou clique para escolher<br><span class="mono">PDF · DOCX · TXT</span>';
+  wipeArmed=false; $('btnWipe').textContent='Apagar dados'; $('saveState').textContent='Dados apagados';
+};
+
+/* ---------- Permissão do microfone ---------- */
+let micPermission='prompt';
+function micUI(state,msg){
+  micPermission=state;
+  const map={granted:['ok','Microfone autorizado','Microfone autorizado ✓'],denied:['bad','Acesso ao microfone bloqueado','Permitir microfone'],prompt:['','Permissão ainda não concedida','Permitir microfone'],unsupported:['bad','Este navegador não dá acesso ao microfone','Permitir microfone']};
+  const [cls,txt,btn]=map[state]||map.prompt;
+  $('micDot').className='dot '+cls; $('micState').textContent=txt; $('btnMic').textContent=btn;
+  $('btnMic').className=state==='granted'?'':'primary';
+  const hints={
+    denied:'O navegador bloqueou o microfone. Clique no ícone de cadeado (ou de câmara) à esquerda do endereço, escolha Microfone → Permitir e recarregue a página. No Windows/macOS confirme também que o navegador tem acesso ao microfone nas definições de privacidade do sistema.',
+    prompt:'Clique em "Permitir microfone" e aceite o pedido do navegador.',
+    granted:location.protocol==='file:'?'Dica: aberta como ficheiro, o navegador pode voltar a pedir a permissão a cada vez. Abra pelo atalho "abrir-copiloto" (endereço http://localhost:8765) para a permissão ficar memorizada.':'Tudo pronto. A permissão fica memorizada para este endereço.',
+    unsupported:'Use o Chrome ou o Edge numa versão recente.'
+  };
+  $('micHint').textContent=msg||hints[state]||'';
+}
+async function checkMicPermission(){
+  const env=micEnvironmentProblem();
+  if(env){ micUI('unsupported',env); return; }
+  try{
+    const p=await navigator.permissions.query({name:'microphone'});
+    micUI(p.state); if(p.state==='granted') listMics();
+    p.onchange=()=>{ micUI(p.state); if(p.state==='granted') listMics(); };
+  }catch(e){ micUI('prompt'); }
+}
+function micEnvironmentProblem(){
+  let inFrame=false; try{ inFrame=window.self!==window.top; }catch(e){ inFrame=true; }
+  const pol=document.permissionsPolicy||document.featurePolicy;
+  const policyBlocks=pol && pol.allowsFeature && !pol.allowsFeature('microphone');
+  if(inFrame||policyBlocks) return 'Está a ver a página dentro de uma pré-visualização (por exemplo, no app do Claude), que nunca permite o microfone. Descarregue o ficheiro e abra-o diretamente no Chrome ou Edge — de preferência com o atalho "abrir-copiloto" incluído.';
+  if(IS_ANDROID && !/^https:$/.test(location.protocol) && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname))
+    return 'No Android, o Chrome não deixa uma página aberta como ficheiro ('+location.protocol+') usar o microfone, mesmo que o Chrome tenha a permissão. Abra a página por um endereço https:// (por exemplo, publicada no GitHub Pages ou no Netlify) e toque em "Permitir microfone".';
+  if(!window.isSecureContext) return 'A página foi aberta por um endereço não seguro ('+location.protocol+'//'+location.host+'). O navegador só permite o microfone em https://, em http://localhost ou a partir de um ficheiro local. Use o atalho "abrir-copiloto".';
+  if(!navigator.mediaDevices?.getUserMedia) return 'Este navegador não dá acesso ao microfone. Use o Chrome ou o Edge numa versão recente, no computador.';
+  return '';
+}
+const RESET_HELP='O navegador tem o microfone bloqueado para esta página e por isso já não mostra o pedido. Para desbloquear:\n1) Clique no ícone à esquerda do endereço (cadeado, "i" ou câmara riscada) → Microfone → Permitir.\n   Ou abra chrome://settings/content/microphone (Edge: edge://settings/content/microphone), retire esta página da lista "Bloqueado" e confirme que o microfone certo está escolhido.\n2) Recarregue a página (F5) e clique em "Permitir microfone" de novo.\n3) Se continuar bloqueado: Windows → Definições → Privacidade → Microfone → ative "Permitir que as aplicações de ambiente de trabalho acedam ao microfone". macOS → Definições do Sistema → Privacidade e Segurança → Microfone → ative o Chrome/Edge.';
+async function requestMic(){
+  const env=micEnvironmentProblem();
+  if(env){ micUI('unsupported',env); return false; }
+  let pre='prompt';
+  try{ pre=(await navigator.permissions.query({name:'microphone'})).state; }catch(e){}
+  if(pre==='denied'){ micUI('denied',RESET_HELP); return false; }
+  $('micState').textContent='À espera da sua resposta no aviso do navegador…';
+  const t0=performance.now();
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({audio:true});
+    s.getTracks().forEach(t=>t.stop());
+    micUI('granted'); await listMics(); return true;
+  }catch(err){
+    const instant=performance.now()-t0<250; // recusado sem mostrar o aviso
+    if(err.name==='NotAllowedError'||err.name==='SecurityError') micUI('denied', instant ? RESET_HELP : 'Escolheu "Bloquear" no aviso. Clique de novo em "Permitir microfone"; se o aviso já não aparecer, siga estes passos:\n'+RESET_HELP);
+    else if(err.name==='NotFoundError') micUI('prompt','Nenhum microfone encontrado. Ligue um microfone ou auscultadores e tente de novo.');
+    else if(err.name==='NotReadableError') micUI('prompt','O microfone está a ser usado por outra aplicação (Teams, Zoom…). Feche-a ou escolha outro dispositivo.');
+    else micUI('prompt','Erro ao aceder ao microfone: '+err.message);
+    return false;
+  }
+}
+async function listMics(){
+  try{
+    const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+    const sel=$('micSel'), keep=sel.value||pendingMic;
+    sel.innerHTML='<option value="">Padrão do sistema</option>';
+    devs.forEach((d,i)=>{ if(d.deviceId==='default') return; const o=document.createElement('option'); o.value=d.deviceId; o.textContent=d.label||('Microfone '+(i+1)); sel.appendChild(o); });
+    pendingMic=keep; selectMic();
+  }catch(e){}
+}
+function selectMic(){ const sel=$('micSel'); if(pendingMic && [...sel.options].some(o=>o.value===pendingMic)) sel.value=pendingMic; }
+navigator.mediaDevices?.addEventListener?.('devicechange',()=>{ if(micPermission==='granted') listMics(); });
+$('micSel').addEventListener('change',()=>{ pendingMic=$('micSel').value; if(listening){ stopListening(); startListening(); } });
+$('btnMic').onclick=requestMic;
+function micConstraints(){ const id=$('micSel').value; return {deviceId:id?{exact:id}:undefined,echoCancellation:true,noiseSuppression:true}; }
+
+let testStream=null, testCtx=null, testRaf=null, testTimer=null;
+function stopTest(){ cancelAnimationFrame(testRaf); clearTimeout(testTimer); testStream&&testStream.getTracks().forEach(t=>t.stop()); testCtx&&testCtx.close(); testStream=testCtx=null; $('testLevel').style.width='0'; $('btnTest').textContent='Testar microfone'; }
+$('btnTest').onclick=async()=>{
+  if(testStream){ stopTest(); return; }
+  try{ testStream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()}); }
+  catch(e){ await requestMic(); return; }
+  micUI('granted'); listMics();
+  testCtx=new AudioContext(); const an=testCtx.createAnalyser(); an.fftSize=1024; testCtx.createMediaStreamSource(testStream).connect(an);
+  const buf=new Float32Array(an.fftSize);
+  const tick=()=>{ an.getFloatTimeDomainData(buf); let s=0; for(const v of buf) s+=v*v; $('testLevel').style.width=Math.min(100,Math.sqrt(s/buf.length)*600)+'%'; testRaf=requestAnimationFrame(tick); };
+  tick(); $('btnTest').textContent='Parar teste (fale agora)'; testTimer=setTimeout(stopTest,10000);
+};
+checkMicPermission();
+
+/* ---------- UI helpers ---------- */
+function setStatus(t,on){ $('statusTxt').textContent=t; $('dot').classList.toggle('on',!!on); }
+function syncEngine(){ const w=$('engine').value==='whisper'; $('openaiBox').hidden=!w; $('langBox').hidden=w; }
+$('engine').addEventListener('change',()=>{ syncEngine(); if(listening){ stopListening(); startListening(); } });
+$('lang').addEventListener('change',()=>{ if(listening && recog){ recog.stop(); } });
+syncEngine();
+const fmtPause = ()=> $('pauseVal').textContent = Number($('pause').value).toFixed(1).replace('.',',')+' s';
+$('pause').addEventListener('input',fmtPause); fmtPause();
+
+/* ---------- CV loading ---------- */
+if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+$('drop').onclick=()=>$('cvFile').click();
+$('drop').onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('cvFile').click(); } };
+$('drop').ondragover=e=>{e.preventDefault();};
+$('drop').ondrop=e=>{e.preventDefault(); if(e.dataTransfer.files[0]) readCV(e.dataTransfer.files[0]);};
+$('cvFile').onchange=e=>{ if(e.target.files[0]) readCV(e.target.files[0]); };
+async function readCV(file){
+  $('drop').textContent='A ler '+file.name+'…';
+  try{
+    let text='';
+    const name=file.name.toLowerCase();
+    if(name.endsWith('.pdf')){
+      const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      for(let i=1;i<=pdf.numPages;i++){ const c=await (await pdf.getPage(i)).getTextContent(); text+=c.items.map(x=>x.str).join(' ')+'\n'; }
+    } else if(name.endsWith('.docx')){
+      text=(await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()})).value;
+    } else text=await file.text();
+    $('cvText').value=text.replace(/[ \t]+/g,' ').trim();
+    $('drop').classList.add('ok'); $('drop').textContent='Currículo carregado ✓ '+file.name+' (clique para trocar)';
+    store.save();
+  }catch(err){ $('drop').classList.remove('ok'); $('drop').textContent='Não consegui ler o ficheiro ('+err.message+'). Cole o texto em "Ver / editar".'; }
+}
+
+/* ---------- Transcript state ---------- */
+let finalText='';      // texto da pergunta em curso (desde a última sugestão)
+let interimText='';
+let doneText='';       // texto já tratado
+let hold=false;        // deteção pausada enquanto o candidato responde
+let pauseTimer=null;
+function renderTranscript(){
+  const t=$('transcript');
+  t.innerHTML='';
+  if(doneText){ const s=document.createElement('span'); s.className='done'; s.textContent=doneText+'\n'; t.appendChild(s); }
+  const cur=document.createElement('span'); cur.textContent=finalText; t.appendChild(cur);
+  if(interimText){ const s=document.createElement('span'); s.className='interim'; s.textContent=' '+interimText; t.appendChild(s); }
+  if(!doneText && !finalText && !interimText) t.innerHTML='<span class="hint">A ouvir… fale ou deixe o entrevistador falar.</span>';
+  t.scrollTop=t.scrollHeight;
+}
+function addFinal(txt){
+  txt=txt.trim(); if(!txt) return;
+  if(hold){ doneText+=(doneText?' ':'')+'[você] '+txt; renderTranscript(); return; }
+  finalText+=(finalText?' ':'')+txt; renderTranscript(); armPause();
+}
+function armPause(){
+  clearTimeout(pauseTimer);
+  pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, Number($('pause').value)*1000);
+}
+function speechActivity(){ clearTimeout(pauseTimer); }
+
+/* Heurística rápida de pergunta (PT/EN); o modelo confirma depois */
+const QWORDS=/(\?|\b(o que|oque|como|por que|porque|porquê|pq|qual|quais|quando|onde|quem|quanto|quantos|quantas|fale|fala|conte|conta|descreva|descreve|explique|explica|diga|me diz|poderia|pode|consegue|você tem|tem alguma|já teve|já trabalhou|gostaria|what|how|why|when|where|who|which|tell me|describe|explain|walk me|can you|could you|would you|do you|did you|have you|are you|is there|give me an example)\b)/i;
+function looksLikeQuestion(t){ return QWORDS.test(t) && t.split(/\s+/).length>=3; }
+
+/* ---------- Engine: browser Web Speech ---------- */
+let recog=null, listening=false;
+function startBrowser(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alertBanner('Este navegador não suporta reconhecimento de voz. Use Chrome ou Edge, ou escolha o motor Whisper.'); return false; }
+  recog=new SR(); recog.continuous=!IS_MOBILE; recog.interimResults=true; recog.lang=$('lang').value; recog.maxAlternatives=1;
+  let lastFinal=''; // no Android o Chrome repete o texto anterior em cada resultado final
+  recog.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i]; let t=r[0].transcript;
+      if(r.isFinal){
+        if(IS_MOBILE && lastFinal && t.toLowerCase().startsWith(lastFinal.toLowerCase())) t=t.slice(lastFinal.length);
+        lastFinal=r[0].transcript; addFinal(t);
+      } else interim+=t;
+    }
+    interimText=interim; if(interim) speechActivity(); renderTranscript();
+  };
+  recog.onstart=()=>{ lastFinal=''; };
+  recog.onerror=e=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      alertBanner(location.protocol==='file:'
+        ? 'O reconhecimento de voz do navegador foi bloqueado porque a página está aberta como ficheiro. Feche e abra pelo atalho "abrir-copiloto" (http://localhost:8765), ou mude o motor para Whisper.'
+        : 'O reconhecimento de voz foi bloqueado. Veja o painel "Microfone" para desbloquear.');
+      stopListening();
+    } else if(e.error==='network'){ alertBanner('O reconhecimento de voz do navegador precisa de internet. Verifique a ligação.'); }
+    else if(e.error==='audio-capture'){ alertBanner('O microfone está ocupado por outra aplicação (chamada, gravador, WhatsApp…). Feche-a e toque em Iniciar escuta de novo.'); stopListening(); }
+    // 'no-speech' e 'aborted' são normais: a escuta reinicia sozinha
+  };
+  recog.onend=()=>{ if(listening && $('engine').value==='browser'){ setTimeout(()=>{ if(!listening||!recog) return; recog.lang=$('lang').value; try{recog.start()}catch(e){} }, IS_MOBILE?150:0); } };
+  recog.start(); return true;
+}
+
+/* ---------- Engine: Whisper (segmenta por silêncio) ---------- */
+let stream=null, actx=null, analyser=null, rafId=null, mrec=null, chunks=[], speaking=false, lastVoice=0;
+async function startMeter(){
+  stream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()});
+  actx=new AudioContext(); analyser=actx.createAnalyser(); analyser.fftSize=1024;
+  actx.createMediaStreamSource(stream).connect(analyser);
+  const buf=new Float32Array(analyser.fftSize);
+  const tick=()=>{
+    analyser.getFloatTimeDomainData(buf);
+    let s=0; for(const v of buf) s+=v*v; const rms=Math.sqrt(s/buf.length);
+    $('level').style.width=Math.min(100,rms*600)+'%';
+    if($('engine').value==='whisper') whisperVAD(rms);
+    rafId=requestAnimationFrame(tick);
+  };
+  tick();
+}
+function whisperVAD(rms){
+  const now=performance.now();
+  if(rms>0.018){ lastVoice=now; speechActivity();
+    if(!speaking){ speaking=true; chunks=[]; mrec=new MediaRecorder(stream); mrec.ondataavailable=e=>chunks.push(e.data); mrec.onstop=sendWhisper; mrec.start(); interimText='(a ouvir…)'; renderTranscript(); }
+  } else if(speaking && now-lastVoice>700){ speaking=false; try{mrec.stop()}catch(e){} }
+}
+async function sendWhisper(){
+  const blob=new Blob(chunks,{type:mrec.mimeType||'audio/webm'});
+  if(blob.size<6000){ interimText=''; renderTranscript(); return; }
+  const key=$('openaiKey').value.trim();
+  if(!key){ alertBanner('Introduza a chave API OpenAI para usar o Whisper.'); return; }
+  interimText='(a transcrever…)'; renderTranscript();
+  const fd=new FormData(); fd.append('file',blob,'audio.webm'); fd.append('model','whisper-1');
+  fd.append('prompt','Entrevista de emprego / job interview. Português e English.');
+  try{
+    const r=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+    const j=await r.json(); interimText='';
+    if(!r.ok) throw new Error(j.error?.message||r.status);
+    addFinal(j.text||'');
+  }catch(err){ interimText=''; renderTranscript(); alertBanner('Erro no Whisper: '+err.message); }
+}
+
+/* ---------- Start / stop ---------- */
+async function startListening(){
+  if(testStream) stopTest();
+  if(micPermission!=='granted' && !(await requestMic())){
+    alertBanner('É preciso autorizar o microfone primeiro — veja as instruções no painel "Microfone".');
+    $('micSec').scrollIntoView({behavior:'smooth',block:'center'}); return;
+  }
+  // No telemóvel o microfone só pode ter um utilizador de cada vez: no motor Navegador
+  // deixamos o microfone só para o reconhecimento de voz (sem medidor de nível).
+  const needMeter = $('engine').value==='whisper' || !IS_MOBILE;
+  if(needMeter){ try{ await startMeter(); }catch(e){ alertBanner('Não foi possível aceder ao microfone: '+e.message); return; } }
+  listening=true;
+  if($('engine').value==='browser' && !startBrowser()){ stopListening(); return; }
+  $('btnStart').textContent='■ Parar escuta'; $('btnStart').className='rec';
+  setStatus(hold?'A ouvir (deteção pausada)':'A ouvir',true); renderTranscript();
+}
+function stopListening(){
+  listening=false; clearTimeout(pauseTimer);
+  try{recog&&recog.stop()}catch(e){} recog=null;
+  try{mrec&&mrec.state!=='inactive'&&mrec.stop()}catch(e){} speaking=false;
+  cancelAnimationFrame(rafId); stream&&stream.getTracks().forEach(t=>t.stop()); actx&&actx.close(); stream=actx=null;
+  $('level').style.width='0'; interimText='';
+  $('btnStart').textContent='● Iniciar escuta'; $('btnStart').className='primary'; setStatus('Parado',false);
+}
+$('btnStart').onclick=()=> listening?stopListening():startListening();
+function setHold(v){ hold=v; $('btnResume').disabled=!v; if(listening) setStatus(v?'A ouvir (deteção pausada)':'A ouvir',true); }
+$('btnResume').onclick=()=>setHold(false);
+document.addEventListener('keydown',e=>{ if(e.code==='Space' && hold && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); setHold(false); } });
+$('btnNow').onclick=()=>{ const t=(finalText+' '+interimText).trim(); if(t) maybeAnswer(t,true); };
+$('btnClear').onclick=()=>{ finalText=interimText=doneText=''; renderTranscript(); };
+$('btnAsk').onclick=()=>{ const t=$('manualQ').value.trim(); if(t){ $('manualQ').value=''; maybeAnswer(t,true); } };
+$('manualQ').onkeydown=e=>{ if(e.key==='Enter') $('btnAsk').click(); };
+
+function alertBanner(msg){ const c=$('current'); c.className='banner'; c.textContent=msg; }
+
+/* ---------- Answer generation (Claude) ---------- */
+let busy=false, abortCtl=null;
+async function maybeAnswer(text,forced){
+  if(!forced && !looksLikeQuestion(text)) return;
+  const key=$('claudeKey').value.trim();
+  if(!key){ alertBanner('Introduza a chave API Anthropic na Configuração para gerar respostas.'); return; }
+  if(abortCtl) abortCtl.abort();
+  // move texto para "tratado"
+  if(finalText){ doneText+=(doneText?'\n':'')+'[entrevistador] '+finalText.trim(); finalText=''; renderTranscript(); }
+  const card=newCard(text);
+  abortCtl=new AbortController();
+  try{
+    let raw='';
+    await streamClaude(key, buildSystem(), text, abortCtl.signal, delta=>{ raw+=delta; paint(card,raw,false); });
+    paint(card,raw,true);
+    if($('holdAfter').checked && card.dataset.type!=='nao') setHold(true);
+  }catch(err){
+    if(err.name!=='AbortError') card.querySelector('.ans').textContent='Erro: '+err.message;
+  }
+}
+function buildSystem(){
+  const v=id=>$(id).value.trim()||'(não informado)';
+  return `És um copiloto discreto para uma ENTREVISTA DE EMPREGO. Ouves a pergunta do entrevistador (transcrita automaticamente, pode ter erros de reconhecimento e sotaques variados — interpreta a intenção) e sugeres o que o CANDIDATO deve responder, na primeira pessoa, como se fosse ele a falar.
+
+Regras:
+- Responde SEMPRE no mesmo idioma da pergunta (português ou inglês). Se for português, segue a variante usada (Brasil ou Portugal).
+- Perguntas PROFISSIONAIS (experiência, competências técnicas, projetos, resultados, formação, motivos para a vaga, situações comportamentais): baseia-te APENAS no CURRÍCULO. Usa factos concretos (empresas, cargos, números, tecnologias). Para perguntas comportamentais, usa o método STAR de forma natural.
+- Perguntas PESSOAIS (personalidade, hobbies, valores, objetivos, pontos fracos, salário, disponibilidade): baseia-te no PERFIL PESSOAL.
+- Nunca inventes experiências que não estão no currículo/perfil. Se faltar informação, sugere uma resposta honesta e indica entre [colchetes] o que o candidato deve completar.
+- Alinha a resposta com a VAGA quando fizer sentido.
+- Resposta para ser dita em voz alta: natural, confiante, 60–120 palavras. Depois, 2–3 tópicos curtos "•" com pontos-chave para lembrar.
+- Se o texto NÃO for uma pergunta ao candidato (conversa, ruído, o próprio candidato a falar), responde apenas a primeira linha com TIPO: nao.
+
+Formato OBRIGATÓRIO — primeira linha exatamente:
+TIPO: profissional | pessoal | nao ; IDIOMA: pt | en ; PERGUNTA: <pergunta reformulada de forma limpa>
+Depois uma linha em branco e a resposta.
+
+=== CURRÍCULO ===
+${v('cvText').slice(0,20000)}
+
+=== PERFIL PESSOAL ===
+Nome: ${v('pName')}
+Sobre mim: ${v('pAbout')}
+Objetivos de carreira: ${v('pGoals')}
+Pontos fortes / a melhorar: ${v('pStrengths')}
+Vida pessoal: ${v('pPersonal')}
+Questões práticas: ${v('pPractical')}
+
+=== VAGA ===
+${v('pJob')}`;
+}
+async function streamClaude(key,system,user,signal,onDelta){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',signal,
+    headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:$('model').value,max_tokens:700,stream:true,system,messages:[{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})
+  });
+  if(!r.ok){ let m=r.status; try{ m=(await r.json()).error?.message||m }catch(e){} throw new Error(m); }
+  const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
+  for(;;){
+    const {done,value}=await rd.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split('\n'); buf=lines.pop();
+    for(const l of lines){ if(!l.startsWith('data:')) continue;
+      try{ const ev=JSON.parse(l.slice(5)); if(ev.type==='content_block_delta' && ev.delta?.text) onDelta(ev.delta.text); if(ev.type==='error') throw new Error(ev.error?.message); }catch(e){ if(e.message && !/JSON/.test(e.message)) throw e; }
+    }
+  }
+}
+function newCard(q){
+  const prev=$('current').querySelector('.card');
+  if(prev){ prev.classList.remove('current'); const h=$('history'); if(h.querySelector('.hint')) h.innerHTML=''; h.prepend(prev); }
+  $('current').className=''; $('current').innerHTML='';
+  const c=document.createElement('div'); c.className='card current';
+  c.innerHTML='<div class="tags"></div><div class="q"></div><div class="ans">A pensar…</div>';
+  c.querySelector('.q').textContent=q;
+  $('current').appendChild(c); return c;
+}
+function paint(card,raw,final){
+  const nl=raw.indexOf('\n');
+  if(nl<0 && !final) return;
+  const head=nl<0?raw:raw.slice(0,nl), body=nl<0?'':raw.slice(nl+1).trim();
+  const type=(head.match(/TIPO:\s*(\w+)/i)||[])[1]?.toLowerCase()||'';
+  const lang=(head.match(/IDIOMA:\s*(\w+)/i)||[])[1]||'';
+  const q=(head.match(/PERGUNTA:\s*(.+)$/i)||[])[1];
+  card.dataset.type=type.startsWith('n')?'nao':type;
+  if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si — a continuar a ouvir.'; card.style.opacity=.6; return; }
+  const tags=card.querySelector('.tags'); tags.innerHTML='';
+  if(type){ const t=document.createElement('span'); t.className='tag '+(type.startsWith('prof')?'pro':'pes'); t.textContent=type.startsWith('prof')?'Profissional · CV':'Pessoal · Perfil'; tags.appendChild(t); }
+  if(lang){ const t=document.createElement('span'); t.className='tag lang'; t.textContent=lang.toUpperCase(); tags.appendChild(t); }
+  if(q) card.querySelector('.q').textContent=q.trim();
+  const a=card.querySelector('.ans'); a.textContent='';
+  body.split(/(\*\*[^*]+\*\*)/).forEach(part=>{ if(/^\*\*.+\*\*$/.test(part)){ const s=document.createElement('strong'); s.textContent=part.slice(2,-2); a.appendChild(s);} else a.appendChild(document.createTextNode(part)); });
+  if(!body) a.textContent='A escrever…';
+}
+</script>
+</body>
+</html>
