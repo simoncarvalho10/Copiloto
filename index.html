@@ -103,7 +103,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .card.current{border:2px solid var(--accent)}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .tag{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:6px;border:1px solid currentColor}
-.tag.pro{color:var(--pro)} .tag.pes{color:var(--pes)} .tag.lang{color:var(--muted)}
+.tag.pro{color:var(--pro)} .tag.pes{color:var(--pes)} .tag.soc{color:var(--accent)} .tag.lang{color:var(--muted)}
 .q{font-weight:600;color:var(--muted);margin-bottom:10px;font-size:.95rem}
 .ans{white-space:pre-wrap;font-size:var(--ans-size);line-height:1.55}
 .ans strong{color:var(--accent)}
@@ -242,6 +242,8 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
     <p class="lead">Usado nas perguntas pessoais. Tudo fica guardado só neste aparelho.</p>
     <section class="panel">
       <label for="pName">Nome</label><input type="text" id="pName" autocomplete="name">
+      <label for="pBasics">Dados básicos (idade, cidade onde vive, nacionalidade)</label>
+      <input type="text" id="pBasics" placeholder="Ex.: 32 anos, vivo em São Paulo, brasileiro">
       <label for="pAbout">Sobre mim (personalidade, valores, motivações)</label>
       <textarea id="pAbout" placeholder="Ex.: Sou organizado, gosto de resolver problemas complexos, valorizo trabalho em equipa…"></textarea>
       <label for="pGoals">Objetivos de carreira</label><textarea id="pGoals" placeholder="Ex.: Crescer para uma função de liderança técnica nos próximos 3 anos."></textarea>
@@ -418,7 +420,7 @@ matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
 
 /* ---------- Gravação automática ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
-const FIELDS = ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','provider','groqModel','model','pause','micSel','voiceSens'];
+const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','provider','groqModel','model','pause','micSel','voiceSens'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
 const CHECKS = ['holdAfter','saveKeys','wake','voiceOn'];
 let saveTimer=null, pendingMic='', ansSize=1.15;
@@ -488,7 +490,7 @@ let wipeArmed=false;
 $('btnWipe').onclick=()=>{
   if(!wipeArmed){ wipeArmed=true; $('btnWipe').textContent='Tocar de novo para apagar'; setTimeout(()=>{wipeArmed=false;$('btnWipe').textContent='Apagar dados';},4000); return; }
   try{ localStorage.removeItem(STORE_KEY); localStorage.removeItem('copiloto'); }catch(e){}
-  ['cvText','pName','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob',...SECRET].forEach(f=>$(f).value='');
+  ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob',...SECRET].forEach(f=>$(f).value='');
   cvDropState(); wipeArmed=false; $('btnWipe').textContent='Apagar dados'; $('saveState').textContent='Dados apagados'; readiness();
 };
 
@@ -660,8 +662,8 @@ function addFinal(txt){
 }
 function armPause(){ clearTimeout(pauseTimer); pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, Number($('pause').value)*1000); }
 function speechActivity(){ clearTimeout(pauseTimer); }
-const QWORDS=/(\?|\b(o que|oque|como|por que|porque|porquê|pq|qual|quais|quando|onde|quem|quanto|quantos|quantas|fale|fala|conte|conta|descreva|descreve|explique|explica|diga|me diz|poderia|pode|consegue|você tem|tem alguma|já teve|já trabalhou|gostaria|what|how|why|when|where|who|which|tell me|describe|explain|walk me|can you|could you|would you|do you|did you|have you|are you|is there|give me an example)\b)/i;
-function looksLikeQuestion(t){ return QWORDS.test(t) && t.split(/\s+/).length>=3; }
+const QWORDS=/(\?|\b(o que|oque|como|por que|porque|porquê|pq|qual|quais|quando|onde|quem|quanto|quantos|quantas|fale|fala|conte|conta|descreva|descreve|explique|explica|diga|me diz|poderia|pode|consegue|você tem|tem alguma|já teve|já trabalhou|gostaria|what|how|why|when|where|who|which|tell me|describe|explain|walk me|can you|could you|would you|do you|did you|have you|are you|is there|give me an example|tudo bem|tudo bom|como vai|como está|como estás|quantos anos|idade|how old|how's it going|nice to meet)\b)/i;
+function looksLikeQuestion(t){ return QWORDS.test(t) && t.split(/\s+/).length>=2; }
 
 /* Motor: reconhecimento de voz do navegador */
 let recog=null, listening=false;
@@ -966,7 +968,10 @@ function buildSystem(cvLimit=20000){
 
 CONTEÚDO
 - Responde SEMPRE no idioma da pergunta (português ou inglês). Em português, usa a variante da pergunta (Brasil ou Portugal) com expressões naturais dessa variante.
-- Perguntas PROFISSIONAIS (experiência, competências, projetos, resultados, formação, porquê esta vaga, situações comportamentais): os factos vêm do CURRÍCULO. Perguntas PESSOAIS (personalidade, valores, hobbies, objetivos, pontos fracos, salário, disponibilidade): vêm do PERFIL PESSOAL.
+- Há três tipos de pergunta:
+  • SOCIAL — formalidades e conversa de circunstância dirigidas ao candidato ("Como está?", "Tudo bem?", "Quantos anos tem?", "Onde mora?", "Conseguiu encontrar-nos bem?", "Está a ouvir-me bem?"). Resposta curta e direta, simpática e profissional sem ser formal: 1 ou 2 frases, 5 a 25 palavras. Responde ao que foi perguntado e, se fizer sentido, devolve a cortesia ("E você?"). Nada de discursos, nada de falar do currículo. Dados como idade ou cidade vêm de "Dados básicos" do PERFIL; se faltarem, usa [colchetes].
+  • PESSOAL — personalidade, valores, hobbies, objetivos, pontos fortes e fracos, salário, disponibilidade: os factos vêm do PERFIL PESSOAL.
+  • PROFISSIONAL — experiência, competências, projetos, resultados, formação, porquê esta vaga, situações comportamentais: os factos vêm do CURRÍCULO.
 - Nunca inventes empresas, cargos, números ou experiências. Se faltar informação, responde de forma honesta e marca entre [colchetes] o que o candidato deve completar.
 - Liga a resposta à VAGA quando fizer sentido.
 - Se for uma pergunta de seguimento ("e porquê?", "pode dar um exemplo?", "e o resultado?"), responde no contexto da CONVERSA ATÉ AGORA, sem repetir o que já foi dito.
@@ -974,18 +979,20 @@ CONTEÚDO
 ESTILO — o mais importante
 - Tem de soar a uma pessoa a falar, não a um texto escrito nem a um currículo lido em voz alta.
 - NUNCA copies frases, listas, títulos ou formulações do currículo. Usa-o só como fonte de factos e conta-os por palavras tuas, como uma pequena história: a situação, o que eu fiz, o que aconteceu.
+- Linguagem simples nas respostas profissionais: explica o que fizeste e o impacto como explicarias a alguém de fora da área. Evita termos técnicos, siglas e nomes de ferramentas, linguagens, sistemas ou metodologias (ex.: "SAP", "Power BI", "Python", "Scrum", "KPI"). Diz antes o que fizeste com eles ("montei relatórios que a direção usava todas as semanas").
+- Só usa nomes de ferramentas e detalhe técnico quando o entrevistador pedir explicitamente mais profundidade: que ferramentas/tecnologias usou, como fez tecnicamente, que nível tem em X, ou pedir para detalhar/aprofundar. Nesse caso podes ser mais técnico e ir até 150 palavras.
 - Escolhe 1 ou 2 exemplos concretos; não enumeres tudo. No máximo um número ou métrica por resposta, dito de forma natural ("cortámos o tempo para metade", não "redução de 50% do lead time").
 - Frases curtas e simples, vocabulário do dia a dia, tom calmo e confiante. Contrações naturais (em inglês: I'm, I've, we'd).
 - Evita jargão e frases feitas: "sou proativo", "resiliente", "sinergia", "dinâmico", "agregar valor", "como consta no meu currículo", "ao longo da minha trajetória".
 - Varia o início das respostas; podes começar de forma natural ("Claro.", "Olha,", "Então,", "Boa pergunta —", "Sure,", "So,"), mas sem repetir a mesma abertura das respostas anteriores.
 - Para perguntas comportamentais, segue a lógica situação → ação → resultado, mas sem a anunciar.
-- Entre 50 e 110 palavras (30 a 45 segundos a falar). Sem listas nem negrito na resposta.
-- Depois da resposta, numa linha à parte: "Lembretes: " seguido de 2 ou 3 palavras-chave curtas separadas por " · " (para eu olhar de relance).
-- Se o texto NÃO for uma pergunta ou pedido ao candidato (conversa de circunstância, ruído, frase cortada sem sentido), responde apenas a primeira linha com TIPO: nao.
+- Tamanho: SOCIAL 5 a 25 palavras; PESSOAL e PROFISSIONAL 50 a 110 palavras (30 a 45 segundos a falar); só com pedido de profundidade técnica até 150. Sem listas nem negrito na resposta.
+- Depois das respostas PESSOAL e PROFISSIONAL, numa linha à parte: "Lembretes: " seguido de 2 ou 3 palavras-chave curtas separadas por " · " (para eu olhar de relance). Nas respostas SOCIAL não há lembretes.
+- Se o texto NÃO for uma pergunta ou pedido ao candidato (comentários do entrevistador para si próprio, ruído, frase cortada sem sentido), responde apenas a primeira linha com TIPO: nao. Cumprimentos e formalidades dirigidos ao candidato NÃO são "nao" — são SOCIAL.
 
 FORMATO OBRIGATÓRIO — primeira linha exatamente:
-TIPO: profissional | pessoal | nao ; IDIOMA: pt | en ; PERGUNTA: <pergunta reformulada de forma limpa>
-Depois uma linha em branco, a resposta, e a linha "Lembretes:".
+TIPO: social | pessoal | profissional | nao ; IDIOMA: pt | en ; PERGUNTA: <pergunta reformulada de forma limpa>
+Depois uma linha em branco, a resposta e, se aplicável, a linha "Lembretes:".
 
 === CONVERSA ATÉ AGORA ===
 ${hist}
@@ -995,6 +1002,7 @@ ${v('cvText').slice(0,cvLimit)}
 
 === PERFIL PESSOAL ===
 Nome: ${v('pName')}
+Dados básicos: ${v('pBasics')}
 Sobre mim: ${v('pAbout')}
 Objetivos de carreira: ${v('pGoals')}
 Pontos fortes / a melhorar: ${v('pStrengths')}
@@ -1028,7 +1036,9 @@ function paint(card,raw,final){
   card.dataset.type=type.startsWith('n')?'nao':type;
   if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si. A continuar a ouvir.'; card.style.opacity=.6; return {type:'nao'}; }
   const tags=card.querySelector('.tags'); tags.innerHTML='';
-  if(type){ const t=document.createElement('span'); t.className='tag '+(type.startsWith('prof')?'pro':'pes'); t.textContent=type.startsWith('prof')?'Profissional · CV':'Pessoal · Perfil'; tags.appendChild(t); }
+  if(type){ const t=document.createElement('span');
+    const k=type.startsWith('prof')?['pro','Profissional · CV']:type.startsWith('soc')?['soc','Conversa']:['pes','Pessoal · Perfil'];
+    t.className='tag '+k[0]; t.textContent=k[1]; tags.appendChild(t); }
   if(lang){ const t=document.createElement('span'); t.className='tag lang'; t.textContent=lang.toUpperCase(); tags.appendChild(t); }
   if(q) card.querySelector('.q').textContent=q;
   const parts=body.split(/\n?\s*(?:Lembretes|Reminders)\s*:\s*/i);
