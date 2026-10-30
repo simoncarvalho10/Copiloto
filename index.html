@@ -115,8 +115,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .headrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
 .headrow h2{margin:0}
 
-#transcript{font-size:.95rem;max-height:7.5em;overflow:auto;white-space:pre-wrap;overscroll-behavior:contain}
+#transcript{font-size:.95rem;max-height:11em;overflow:auto;white-space:pre-wrap;overscroll-behavior:contain}
 #transcript .done{color:var(--muted)}
+#transcript .seg{padding:6px 0;border-bottom:1px dashed var(--line)}
+#transcript .seg:last-child{border-bottom:0}
+#transcript .seg.used .orig{color:var(--muted)}
+#transcript .orig{display:block}
+#transcript .pt{display:block;font-size:.88em;color:var(--pro);margin-top:2px}
+#transcript .pt::before{content:"PT · ";font-family:var(--mono);font-size:.75em;opacity:.8}
+#transcript .note{display:block;font-size:.82em;color:var(--muted);font-style:italic;padding:4px 0}
+.livemsg{font-size:.85rem;border-radius:10px;padding:8px 12px;margin-bottom:10px;background:var(--soft);color:var(--ink)}
+.livemsg.busy{color:var(--muted)}
+.livemsg.err{color:var(--live)}
+.card.cut .ans::after{content:" …";color:var(--muted)}
 #transcript .interim{color:var(--muted);font-style:italic}
 details.test summary{cursor:pointer;font-weight:600;font-size:.9rem;padding:4px 0;color:var(--muted)}
 details.test .row{margin-top:10px}
@@ -162,7 +173,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
   .actionbar{bottom:0;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
   .actionbar .inner{max-width:1280px}
   #btnStart{flex:0 1 360px}
-  #transcript{max-height:12em}
+  #transcript{max-height:16em}
 }
 @media (min-width:600px) and (max-width:899px){
   .app{max-width:720px}
@@ -202,6 +213,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
           <button class="ghost" id="fontUp" aria-label="Aumentar letra">A+</button>
         </div>
       </div>
+      <div class="livemsg" id="liveMsg" hidden></div>
       <div id="current">
         <div class="banner" id="welcome">Quando o entrevistador terminar uma pergunta, a sugestão aparece aqui, no idioma escolhido.
           <ul class="ready" id="ready">
@@ -237,7 +249,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
     </section>
 
     <section class="panel">
-      <h2>Histórico</h2>
+      <h2>Resposta anterior</h2>
       <div id="history"><span class="hint">Sem perguntas ainda.</span></div>
     </section>
   </div>
@@ -405,11 +417,12 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
       <div id="openaiBox" hidden>
         <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off">
       </div>
-      <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,6 s</span></label>
-      <input type="range" id="pause" min="0.8" max="4" step="0.1" value="1.6">
+      <label for="pause">Pausa que indica fim da pergunta: <span id="pauseVal" class="mono">1,2 s</span></label>
+      <input type="range" id="pause" min="0.6" max="4" step="0.1" value="1.2">
       <label class="check"><input type="checkbox" id="holdAfter" checked> Depois de sugerir, pausar a deteção enquanto eu respondo (só quando o reconhecimento de voz está desligado)</label>
       <label class="check"><input type="checkbox" id="saveKeys" checked> Guardar as chaves API neste aparelho</label>
       <label class="check"><input type="checkbox" id="wake" checked> Manter o ecrã ligado durante a escuta</label>
+      <label class="check"><input type="checkbox" id="subsOn" checked> Mostrar legenda em português por baixo da transcrição (quando o idioma não é português)</label>
     </section>
   </div>
 </main>
@@ -454,7 +467,7 @@ matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
 const STORE_KEY='copiloto-entrevista-v2';
 const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','cName','cWhat','cCulture','cNews','cPeople','cWhy','cBridge','cNotes','engine','provider','groqModel','model','pause','micSel','voiceSens'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
-const CHECKS = ['holdAfter','saveKeys','wake','voiceOn'];
+const CHECKS = ['holdAfter','saveKeys','wake','voiceOn','subsOn'];
 let saveTimer=null, pendingMic='', ansSize=1.15;
 const store = {
   collect(withKeys){
@@ -680,24 +693,76 @@ async function readCV(file){
 }
 
 /* ---------- Transcrição ---------- */
-let finalText='', interimText='', doneText='', hold=false, pauseTimer=null;
+// entries: cada fala transcrita {kind:'int'|'note', text, pt, used}
+let entries=[], finalText='', interimText='', hold=false, pauseTimer=null, pendingTx=0, answerWhenReady=false;
 function renderTranscript(){
   const t=$('transcript'); t.innerHTML='';
-  if(doneText){ const s=document.createElement('span'); s.className='done'; s.textContent=doneText+'\n'; t.appendChild(s); }
-  const cur=document.createElement('span'); cur.textContent=finalText; t.appendChild(cur);
-  if(interimText){ const s=document.createElement('span'); s.className='interim'; s.textContent=' '+interimText; t.appendChild(s); }
-  if(!doneText&&!finalText&&!interimText) t.innerHTML='<span class="hint">'+(listening?'A ouvir… deixe o entrevistador falar.':'Toque em "Começar a ouvir" e deixe o entrevistador falar.')+'</span>';
+  const list=entries.slice(-14);
+  for(const e of list){
+    if(e.kind==='note'){ const n=document.createElement('span'); n.className='note'; n.textContent=e.text; t.appendChild(n); continue; }
+    const d=document.createElement('div'); d.className='seg'+(e.used?' used':'');
+    const o=document.createElement('span'); o.className='orig'; o.textContent=e.text; d.appendChild(o);
+    if(e.pt){ const p=document.createElement('span'); p.className='pt'; p.textContent=e.pt; d.appendChild(p); }
+    t.appendChild(d);
+  }
+  if(interimText){ const s=document.createElement('span'); s.className='interim'; s.textContent=interimText; t.appendChild(s); }
+  if(!list.length && !interimText) t.innerHTML='<span class="hint">'+(listening?'A ouvir… deixe o entrevistador falar.':'Toque em "Começar a ouvir" e deixe o entrevistador falar.')+'</span>';
   t.scrollTop=t.scrollHeight;
 }
-function addFinal(txt){
-  txt=txt.trim(); if(!txt) return;
-  if(hold){ doneText+=(doneText?' ':'')+'[você] '+txt; renderTranscript(); return; }
-  finalText+=(finalText?' ':'')+txt; renderTranscript(); armPause();
+function addNote(txt){
+  const last=entries[entries.length-1];
+  if(last && last.kind==='note' && last.text===txt) return;
+  entries.push({kind:'note',text:txt}); renderTranscript();
 }
-function armPause(){ clearTimeout(pauseTimer); pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, Number($('pause').value)*1000); }
+// endedAt = momento em que a pessoa parou de falar (para não esperar a pausa duas vezes)
+function addFinal(txt,endedAt){
+  txt=(txt||'').trim(); if(!txt) return;
+  if(hold){ addNote('— você: '+txt); return; }
+  const e={kind:'int',text:txt,pt:'',used:false}; entries.push(e);
+  finalText+=(finalText?' ':'')+txt; renderTranscript();
+  translateEntry(e);
+  if(answerWhenReady && pendingTx===0){ answerWhenReady=false; clearTimeout(pauseTimer); maybeAnswer(finalText.trim(),false); return; }
+  armPause(endedAt||performance.now());
+}
+function armPause(endedAt){
+  clearTimeout(pauseTimer);
+  if(speaking && segWho!=='me') return;          // o entrevistador ainda está a falar
+  let base=Number($('pause').value)*1000;
+  if(/[?？]\s*$/.test(finalText)) base=Math.min(base,450);   // terminou com "?": responder já
+  const delay=Math.max(0, base-(performance.now()-endedAt));
+  pauseTimer=setTimeout(()=>{ if(!hold && finalText.trim()) maybeAnswer(finalText.trim(),false); }, delay);
+}
 function speechActivity(){ clearTimeout(pauseTimer); }
 const QWORDS=/(\?|\b(o que|oque|como|por que|porque|porquê|pq|qual|quais|quando|onde|quem|quanto|quantos|quantas|fale|fala|conte|conta|descreva|descreve|explique|explica|diga|me diz|poderia|pode|consegue|você tem|tem alguma|já teve|já trabalhou|gostaria|what|how|why|when|where|who|which|tell me|describe|explain|walk me|can you|could you|would you|do you|did you|have you|are you|is there|give me an example|tudo bem|tudo bom|como vai|como está|como estás|quantos anos|idade|how old|how's it going|nice to meet)\b)/i;
-function looksLikeQuestion(t){ return QWORDS.test(t) && t.split(/\s+/).length>=2; }
+// Afirmações e concordâncias curtas: nunca geram resposta
+const ACK=/^(?:[\s,.!…-]*(?:ok(?:ay)?|alright|all right|great|perfect|nice|cool|sure|right|exactly|absolutely|definitely|yes|yeah|yep|yup|got it|i see|i agree|agreed|that makes sense|makes sense|interesting|awesome|good|very good|wonderful|excellent|fantastic|amazing|thank you|thanks|uh-?huh|mm-?hmm|hmm|wow|of course|fair enough|sounds good|that's great|that's good|that's right|that's interesting|i understand|understood|certo|beleza|ótimo|otimo|perfeito|legal|entendi|entendo|concordo|faz sentido|exato|exatamente|isso|isso mesmo|sim|claro|com certeza|muito bem|bacana|show|interessante|obrigad[oa]|valeu|tá|ta bom|tá bom|está bem|pois|pois é|verdade|maravilha|excelente|bom|muito bom|uau|nossa)[\s,.!…-]*)+$/i;
+function isAck(t){ return !/[?？]/.test(t) && (ACK.test(t.trim()) || t.trim().split(/\s+/).length<=1); }
+function looksLikeQuestion(t){ return !isAck(t) && QWORDS.test(t) && t.split(/\s+/).length>=2; }
+
+/* ---------- Legenda em português ---------- */
+async function translateEntry(e){
+  if(!$('subsOn').checked || $('lang').value.startsWith('pt') || e.text.split(/\s+/).length<2) return;
+  const gk=$('groqKey').value.trim(), ck=$('claudeKey').value.trim();
+  const sys='Traduza para português do Brasil, de forma natural e fiel. Responda apenas com a tradução, sem aspas nem comentários.';
+  try{
+    let out='';
+    if(gk){
+      for(const model of ['llama-3.1-8b-instant','openai/gpt-oss-20b','llama-3.3-70b-versatile']){
+        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+gk},
+          body:JSON.stringify({model,temperature:0,max_tokens:300,messages:[{role:'system',content:sys},{role:'user',content:e.text}]})});
+        if(!r.ok) continue;
+        out=(await r.json()).choices?.[0]?.message?.content||''; break;
+      }
+    } else if(ck){
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'content-type':'application/json','x-api-key':ck,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:300,system:sys,messages:[{role:'user',content:e.text}]})});
+      if(r.ok) out=((await r.json()).content||[]).map(c=>c.text||'').join('');
+    }
+    out=out.replace(/<think>[\s\S]*?<\/think>/g,'').trim();
+    if(out){ e.pt=out; renderTranscript(); }
+  }catch(err){}
+}
 
 /* Motor: reconhecimento de voz do navegador */
 let recog=null, listening=false;
@@ -710,7 +775,7 @@ function startBrowser(){
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       const r=e.results[i]; let t=r[0].transcript;
-      if(r.isFinal){ if(IS_MOBILE && lastFinal && t.toLowerCase().startsWith(lastFinal.toLowerCase())) t=t.slice(lastFinal.length); lastFinal=r[0].transcript; addFinal(t); }
+      if(r.isFinal){ if(IS_MOBILE && lastFinal && t.toLowerCase().startsWith(lastFinal.toLowerCase())) t=t.slice(lastFinal.length); lastFinal=r[0].transcript; addFinal(t,performance.now()); }
       else interim+=t;
     }
     interimText=interim; if(interim) speechActivity(); renderTranscript();
@@ -727,7 +792,7 @@ function startBrowser(){
 
 /* ---------- Impressão vocal (MFCC calculados no próprio aparelho) ---------- */
 const VAD_THR=0.018, VOICE_KEY='copiloto-voz';
-let voiceProfile=null; try{ voiceProfile=JSON.parse(localStorage.getItem(VOICE_KEY)||'null'); }catch(e){}
+let voiceProfile=null; try{ voiceProfile=JSON.parse(localStorage.getItem(VOICE_KEY)||'null'); if(voiceProfile && voiceProfile.v!==2) voiceProfile=null; }catch(e){}
 let FB=null, fbKey='';
 function melBank(sr,fft){
   const key=sr+'/'+fft; if(fbKey===key) return FB;
@@ -777,6 +842,7 @@ $('voiceSens').addEventListener('input',voiceUI);
 $('voiceOn').addEventListener('change',()=>{ voiceUI(); if($('voiceOn').checked && listening && $('engine').value==='browser'){ stopListening(); startListening(); } });
 $('btnVoiceDel').onclick=()=>{ voiceProfile=null; try{localStorage.removeItem(VOICE_KEY)}catch(e){} voiceUI(); };
 let enrolling=false;
+const VOICE_CHUNK=16;   // ~0,7 s de voz: o mesmo tamanho usado durante a escuta
 $('btnEnroll').onclick=async()=>{
   if(enrolling) return;
   if(listening) stopListening(); if(testStream) stopTest();
@@ -784,114 +850,156 @@ $('btnEnroll').onclick=async()=>{
   let st; try{ st=await navigator.mediaDevices.getUserMedia({audio:micConstraints()}); }catch(e){ $('voiceState').textContent='Não consegui usar o microfone'; return; }
   enrolling=true; $('enrollBox').hidden=false; $('btnEnroll').disabled=true; $('enrollHint').textContent='A gravar… fale normalmente, como na entrevista.';
   keepAwake(true);
-  const ctx=new AudioContext(), an=ctx.createAnalyser(); an.fftSize=1024; an.smoothingTimeConstant=0;
-  ctx.createMediaStreamSource(st).connect(an);
-  const td=new Float32Array(1024), fd=new Float32Array(512), frames=[], DUR=15000, t0=performance.now();
+  const ctx=new AudioContext(); try{ await ctx.resume(); }catch(e){}
+  const src=ctx.createMediaStreamSource(st), an=ctx.createAnalyser(); an.fftSize=1024; an.smoothingTimeConstant=0; src.connect(an);
+  const pr=ctx.createScriptProcessor(2048,1,1), mute=ctx.createGain(); mute.gain.value=0; src.connect(pr); pr.connect(mute); mute.connect(ctx.destination);
+  const fd=new Float32Array(512), frames=[], DUR=15000, t0=performance.now(); let floor=0;
   await new Promise(done=>{
-    const tick=()=>{
-      an.getFloatTimeDomainData(td); let s=0; for(const v of td) s+=v*v; const rms=Math.sqrt(s/td.length);
-      if(rms>VAD_THR){ an.getFloatFrequencyData(fd); frames.push(mfcc(fd,ctx.sampleRate,1024)); }
+    pr.onaudioprocess=ev=>{
+      const x=ev.inputBuffer.getChannelData(0); let s=0; for(let k=0;k<x.length;k++) s+=x[k]*x[k]; const rms=Math.sqrt(s/x.length);
+      floor = floor ? (rms<floor ? floor*0.85+rms*0.15 : floor*0.995+rms*0.005) : rms;
+      const thr=Math.max(0.007,Math.min(0.04,floor*3.2));
+      if(rms>thr){ an.getFloatFrequencyData(fd); frames.push(mfcc(fd,ctx.sampleRate,1024)); }
       const p=(performance.now()-t0)/DUR; $('enrollProg').style.width=Math.min(100,p*100)+'%';
-      if(p<1) requestAnimationFrame(tick); else done();
-    }; tick();
+      if(p>=1){ pr.onaudioprocess=null; done(); }
+    };
   });
-  st.getTracks().forEach(t=>t.stop()); try{ctx.close()}catch(e){}
+  try{ pr.disconnect(); }catch(e){} st.getTracks().forEach(t=>t.stop()); try{ctx.close()}catch(e){}
   enrolling=false; $('btnEnroll').disabled=false; keepAwake(false);
-  if(frames.length<180){ $('enrollHint').textContent='Ouvi pouca voz. Fale um pouco mais alto ou mais perto do aparelho e grave de novo.'; return; }
-  const prof=vstats(frames), CH=45, ds=[];
-  for(let i=0;i+CH<=frames.length;i+=CH) ds.push(vdist(vstats(frames.slice(i,i+CH)).mu,prof));
-  const mean=ds.reduce((a,b)=>a+b,0)/ds.length, max=Math.max(...ds);
-  voiceProfile={mu:prof.mu, sd:prof.sd, dRef:Math.max(max,mean*1.3), date:new Date().toISOString(), n:frames.length};
+  if(frames.length<100){ $('enrollHint').textContent='Ouvi pouca voz. Fale um pouco mais alto ou mais perto do aparelho e grave de novo.'; return; }
+  const prof=vstats(frames), ds=[];
+  for(let i=0;i+VOICE_CHUNK<=frames.length;i+=VOICE_CHUNK) ds.push(vdist(vstats(frames.slice(i,i+VOICE_CHUNK)).mu,prof));
+  ds.sort((a,b)=>a-b);
+  const mean=ds.reduce((a,b)=>a+b,0)/ds.length, p90=ds[Math.floor(ds.length*0.9)]||ds[ds.length-1];
+  voiceProfile={v:2, mu:prof.mu, sd:prof.sd, dRef:Math.max(p90,mean*1.3), date:new Date().toISOString(), n:frames.length};
   try{ localStorage.setItem(VOICE_KEY,JSON.stringify(voiceProfile)); }catch(e){}
   $('enrollHint').textContent='Voz registada ✓. Pode começar a ouvir.';
   setTimeout(()=>{ $('enrollBox').hidden=true; },2500);
   voiceUI();
 };
 
-/* Motor: Whisper (Groq ou OpenAI), segmenta por silêncio e separa a sua voz */
-let stream=null, actx=null, rafId=null, mrec=null, speaking=false, lastVoice=0, segFrames=[], segStart=0, segWho=null;
+/* Motor: Whisper (Groq ou OpenAI) — grava o áudio em bruto (com 0,4 s antes de cada fala,
+   para não cortar a primeira palavra), deteta as pausas e separa a sua voz */
+let stream=null, actx=null, proc=null, speaking=false, lastVoice=0, segFrames=[], segStart=0, segWho=null;
+let segPCM=[], preBuf=[], voicedMs=0, noiseFloor=0, vadThr=VAD_THR;
+const SIL_MS=550, PRE_CHUNKS=10, MAX_SEG=22000;
 async function startMeter(){
   stream=await navigator.mediaDevices.getUserMedia({audio:micConstraints()});
-  actx=new AudioContext(); const analyser=actx.createAnalyser(); analyser.fftSize=1024; analyser.smoothingTimeConstant=0;
-  actx.createMediaStreamSource(stream).connect(analyser);
-  const buf=new Float32Array(analyser.fftSize), fd=new Float32Array(analyser.frequencyBinCount);
-  const tick=()=>{
-    analyser.getFloatTimeDomainData(buf); let s=0; for(const v of buf) s+=v*v; const rms=Math.sqrt(s/buf.length);
+  actx=new AudioContext(); try{ await actx.resume(); }catch(e){}
+  const src=actx.createMediaStreamSource(stream);
+  const analyser=actx.createAnalyser(); analyser.fftSize=1024; analyser.smoothingTimeConstant=0; src.connect(analyser);
+  proc=actx.createScriptProcessor(2048,1,1); src.connect(proc);
+  const mute=actx.createGain(); mute.gain.value=0; proc.connect(mute); mute.connect(actx.destination);
+  const fd=new Float32Array(analyser.frequencyBinCount), chunkMs=2048/actx.sampleRate*1000;
+  noiseFloor=0; preBuf=[]; segPCM=[]; speaking=false;
+  proc.onaudioprocess=ev=>{
+    const x=new Float32Array(ev.inputBuffer.getChannelData(0));
+    let s=0; for(let i=0;i<x.length;i++) s+=x[i]*x[i]; const rms=Math.sqrt(s/x.length);
+    // limiar adaptativo: segue o ruído de fundo da sala
+    if(!speaking) noiseFloor = noiseFloor ? (rms<noiseFloor ? noiseFloor*0.85+rms*0.15 : noiseFloor*0.995+rms*0.005) : rms;
+    vadThr=Math.max(0.007, Math.min(0.04, noiseFloor*3.2));
     $('level').style.width=Math.min(100,rms*600)+'%';
-    if($('engine').value.startsWith('whisper')){
-      let feat=null; if(rms>VAD_THR && voiceActive()){ analyser.getFloatFrequencyData(fd); feat=mfcc(fd,actx.sampleRate,analyser.fftSize); }
-      whisperVAD(rms,feat);
-    }
-    rafId=requestAnimationFrame(tick);
+    if(!$('engine').value.startsWith('whisper')) return;
+    let feat=null; if(rms>vadThr && voiceActive()){ analyser.getFloatFrequencyData(fd); feat=mfcc(fd,actx.sampleRate,analyser.fftSize); }
+    vadChunk(x,rms,feat,chunkMs);
   };
-  tick();
 }
-function whisperVAD(rms,feat){
+function vadChunk(x,rms,feat,chunkMs){
   const now=performance.now(), vf=voiceActive();
-  if(rms>VAD_THR){
+  if(rms>vadThr){
     lastVoice=now;
-    if(!speaking) startSeg();
+    if(!speaking){ speaking=true; segStart=now; segFrames=[]; segWho=null; voicedMs=0; segPCM=preBuf.slice(); preBuf=[];
+      if(!vf){ interimText='(a ouvir…)'; renderTranscript(); } }
+    segPCM.push(x); voicedMs+=chunkMs;
     if(feat) segFrames.push(feat);
     if(!vf) speechActivity();
-    else if(segWho===null && segFrames.length>=45){ const sc=voiceScore(segFrames); segWho=sc&&sc.isMe?'me':'other'; whoKnown(segWho,sc); }
+    else if(segWho===null && segFrames.length>=16){ const sc=voiceScore(segFrames); segWho=sc&&sc.isMe?'me':'other'; whoKnown(segWho,sc); }
     else if(segWho==='other') speechActivity();
-  } else if(speaking && now-lastVoice>700) endSeg();
-  if(speaking && now-segStart>20000) endSeg();
+  } else if(speaking){
+    segPCM.push(x);
+    if(now-lastVoice>SIL_MS) endSeg();
+  } else { preBuf.push(x); if(preBuf.length>PRE_CHUNKS) preBuf.shift(); }
+  if(speaking && now-segStart>MAX_SEG) endSeg();
 }
 function whoKnown(who,sc){
   showWho(who,sc);
   if(who==='other'){ speechActivity(); interimText='(entrevistador a falar…)'; }
   else{
     interimText='(você a falar — não transcrito)';
-    // começou a responder: a pergunta terminou, sugerir já
-    if(finalText.trim()){ clearTimeout(pauseTimer); maybeAnswer(finalText.trim(),true); }
+    // começou a responder: a pergunta terminou
+    clearTimeout(pauseTimer);
+    if(pendingTx>0) answerWhenReady=true;
+    else if(finalText.trim()) maybeAnswer(finalText.trim(),false);
   }
   renderTranscript();
 }
-function startSeg(){
-  speaking=true; segStart=performance.now(); segFrames=[]; segWho=null;
-  const ch=[], rec=new MediaRecorder(stream);
-  rec.ondataavailable=e=>ch.push(e.data);
-  rec.onstop=()=>handleSegment(ch,rec.mimeType,rec._frames||[],rec._who);
-  rec.start(); mrec=rec;
-  if(!voiceActive()){ interimText='(a ouvir…)'; renderTranscript(); }
-}
 function endSeg(){
+  if(!speaking) return;
   speaking=false;
-  if(mrec){ mrec._frames=segFrames; mrec._who=segWho; segFrames=[]; try{ if(mrec.state!=='inactive') mrec.stop(); }catch(e){} }
+  const pcm=segPCM, frames=segFrames, who=segWho, voiced=voicedMs, ended=lastVoice, sr=actx?actx.sampleRate:48000;
+  segPCM=[]; segFrames=[];
+  handleSegment(pcm,sr,frames,who,voiced,ended);
 }
+function encodeWAV(chunks,sr){
+  let n=0; for(const c of chunks) n+=c.length;
+  const target=16000, ratio=sr/target, outLen=Math.floor(n/ratio), out=new Int16Array(outLen);
+  const all=new Float32Array(n); let o=0; for(const c of chunks){ all.set(c,o); o+=c.length; }
+  for(let i=0;i<outLen;i++){ const a=Math.floor(i*ratio), b=Math.min(n,Math.floor((i+1)*ratio)); let s=0; for(let k=a;k<b;k++) s+=all[k]; const v=s/Math.max(1,b-a); out[i]=Math.max(-1,Math.min(1,v))*0x7fff; }
+  const buf=new ArrayBuffer(44+out.length*2), dv=new DataView(buf);
+  const w=(off,str)=>{ for(let i=0;i<str.length;i++) dv.setUint8(off+i,str.charCodeAt(i)); };
+  w(0,'RIFF'); dv.setUint32(4,36+out.length*2,true); w(8,'WAVE'); w(12,'fmt '); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,target,true); dv.setUint32(28,target*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true); w(36,'data'); dv.setUint32(40,out.length*2,true);
+  new Int16Array(buf,44).set(out);
+  return new Blob([buf],{type:'audio/wav'});
+}
+// Frases que o Whisper "inventa" em silêncio ou ruído
+const HALLU=/^(?:thank you\.?|thanks\.?|thank you for watching\.?|thanks for watching!?|bye\.?|you\.?|okay\.?|obrigad[oa]\.?|tchau\.?|legendas? pela comunidade amara\.org|subtitles by.*|♪+|\.+|…)$/i;
 let lastMine=0;
-async function handleSegment(chunks,mime,frames,provWho){
-  const blob=new Blob(chunks,{type:mime||'audio/webm'});
+async function handleSegment(pcm,sr,frames,provWho,voiced,endedAt){
   if(voiceActive()){
     const sc=voiceScore(frames);
     const isMe = sc ? sc.isMe : provWho==='me';
     if(sc) showWho(isMe?'me':'other',sc);
     if(isMe){
       interimText='';
-      if(performance.now()-lastMine>8000){ doneText+=(doneText?'\n':'')+'— você falou (não transcrito)'; }
-      lastMine=performance.now(); renderTranscript();
-      if(provWho!=='me' && finalText.trim()) maybeAnswer(finalText.trim(),true);
+      if(performance.now()-lastMine>8000) addNote('— você falou (não transcrito)'); else renderTranscript();
+      lastMine=performance.now();
+      if(provWho!=='me'){ if(pendingTx>0) answerWhenReady=true; else if(finalText.trim()) maybeAnswer(finalText.trim(),false); }
       return;
     }
   }
-  if(blob.size<6000){ interimText=''; renderTranscript(); return; }
+  if(voiced<300){ interimText=''; renderTranscript(); return; }   // ruído curto
   const groq=$('engine').value==='whisper-groq';
   const key=(groq?$('groqKey'):$('openaiKey')).value.trim();
-  if(!key){ interimText=''; renderTranscript(); alertBanner('Falta a chave API '+(groq?'Groq':'OpenAI')+' em Ajustes para usar o Whisper.'); return; }
+  if(!key){ interimText=''; renderTranscript(); alertBanner('Falta a chave API '+(groq?'Groq':'OpenAI')+' em Ajustes para transcrever.'); return; }
   interimText='(a transcrever…)'; renderTranscript();
-  const m=mime||''; const ext=m.includes('mp4')?'mp4':m.includes('ogg')?'ogg':'webm';
-  const fd=new FormData(); fd.append('file',blob,'audio.'+ext); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
   const lg=$('lang').value.slice(0,2);
-  fd.append('language',lg);
-  fd.append('prompt',lg==='pt'?'Entrevista de emprego.':'Job interview.');
+  const fd=new FormData(); fd.append('file',encodeWAV(pcm,sr),'audio.wav'); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
+  fd.append('language',lg); fd.append('temperature','0'); fd.append('response_format','json');
+  fd.append('prompt',lg==='pt'?'Entrevista de emprego. Perguntas e respostas.':'Job interview. Questions and answers.');
+  pendingTx++;
   try{
-    const r=await fetch(groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
-    if(r.status===429){ interimText=''; renderTranscript(); alertBanner('Limite gratuito atingido por agora. Espere um minuto.'); return; }
-    const j=await r.json(); interimText='';
+    let r=null;
+    for(let attempt=0;attempt<2;attempt++){
+      r=await fetch(groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
+      if(r.status<500) break;                       // erro temporário do servidor: tenta mais uma vez
+    }
+    if(r.status===429){ alertBanner('Limite gratuito da transcrição atingido por agora. Espere um minuto.'); return; }
+    if(r.status===401){ alertBanner('Chave '+(groq?'Groq':'OpenAI')+' inválida para a transcrição. Confirme em Ajustes.'); return; }
+    const j=await r.json();
     if(!r.ok) throw new Error(j.error?.message||r.status);
-    addFinal(j.text||'');
-  }catch(err){ interimText=''; renderTranscript(); alertBanner('Erro na transcrição: '+err.message); }
+    const text=(j.text||'').trim();
+    if(!text || HALLU.test(text)) return;
+    pendingTx--; interimText='';
+    addFinal(text,endedAt);
+    pendingTx++;                                    // compensado no finally
+  }catch(err){ alertBanner('Erro na transcrição: '+err.message); }
+  finally{
+    pendingTx=Math.max(0,pendingTx-1);
+    if(interimText.startsWith('(a transcrever')) interimText='';
+    renderTranscript();
+    if(answerWhenReady && pendingTx===0){ answerWhenReady=false; if(finalText.trim()) maybeAnswer(finalText.trim(),false); }
+  }
 }
 
 /* ---------- Começar / parar ---------- */
@@ -919,8 +1027,8 @@ async function startListening(){
 function stopListening(){
   listening=false; clearTimeout(pauseTimer);
   try{recog&&recog.stop()}catch(e){} recog=null;
-  if(speaking) endSeg(); speaking=false;
-  cancelAnimationFrame(rafId); stream&&stream.getTracks().forEach(t=>t.stop()); try{actx&&actx.close()}catch(e){} stream=actx=null;
+  if(speaking && actx) endSeg(); speaking=false;
+  try{ if(proc){ proc.onaudioprocess=null; proc.disconnect(); } }catch(e){} proc=null; stream&&stream.getTracks().forEach(t=>t.stop()); try{actx&&actx.close()}catch(e){} stream=actx=null; preBuf=[]; pendingTx=0; answerWhenReady=false;
   $('level').style.width='0'; interimText=''; $('voiceLast').hidden=true; setStartUI(false); keepAwake(false); setStatus('Parado',false); renderTranscript();
 }
 $('btnStart').onclick=()=> listening?stopListening():startListening();
@@ -928,35 +1036,51 @@ function setHold(v){ hold=v; $('btnResume').disabled=!v; if(listening) setStatus
 $('btnResume').onclick=()=>setHold(false);
 document.addEventListener('keydown',e=>{ if(e.code==='Space' && hold && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); setHold(false); } });
 $('btnNow').onclick=()=>{ const t=(finalText+' '+interimText).trim(); if(t) maybeAnswer(t,true); else alertBanner('Ainda não há texto ouvido para responder.'); };
-$('btnClear').onclick=()=>{ finalText=interimText=doneText=''; qaLog=[]; renderTranscript(); };
+$('btnClear').onclick=()=>{ entries=[]; finalText=interimText=''; qaLog=[]; renderTranscript(); };
 $('btnAsk').onclick=()=>{ const t=$('manualQ').value.trim(); if(t){ $('manualQ').value=''; $('manualQ').blur(); maybeAnswer(t,true); } };
 $('manualQ').onkeydown=e=>{ if(e.key==='Enter') $('btnAsk').click(); };
-function alertBanner(msg){
-  const c=$('current'); const prev=c.querySelector('.card.current');
-  if(prev){ archive(prev); }
-  c.innerHTML=''; const b=document.createElement('div'); b.className='banner'; b.textContent=msg; c.appendChild(b);
-  if(view!=='live') go('live');
+let msgTimer=null;
+function liveMsg(msg,kind){
+  const m=$('liveMsg'); clearTimeout(msgTimer);
+  if(!msg){ m.hidden=true; return; }
+  m.hidden=false; m.className='livemsg'+(kind?' '+kind:''); m.textContent=msg;
+  if(kind!=='busy') msgTimer=setTimeout(()=>{ m.hidden=true; }, kind==='err'?15000:5000);
 }
+function alertBanner(msg){ liveMsg(msg,'err'); if(view!=='live' && !$('liveMsg').hidden) go('live'); }
 
 /* ---------- Gerar respostas ---------- */
 let abortCtl=null, qaLog=[];
 async function maybeAnswer(text,forced){
-  if(!forced && !looksLikeQuestion(text)) return;
+  text=(text||'').trim(); if(!text) return;
+  const consume=()=>{ entries.forEach(e=>{ if(e.kind==='int') e.used=true; }); finalText=''; renderTranscript(); };
+  if(!forced && !looksLikeQuestion(text)){ consume(); return; }   // afirmação ou concordância: não responde
   const prov=$('provider').value;
   const key=(prov==='groq'?$('groqKey'):$('claudeKey')).value.trim();
   if(!key){ alertBanner('Falta a chave API '+(prov==='groq'?'Groq (grátis em console.groq.com)':'Anthropic')+'. Toque em Ajustes para a colar.'); return; }
   const streamFn=prov==='groq'?streamGroq:streamClaude;
   if(abortCtl) abortCtl.abort();
-  if(finalText){ doneText+=(doneText?'\n':'')+'[entrevistador] '+finalText.trim(); finalText=''; renderTranscript(); }
-  const card=newCard(text);
-  abortCtl=new AbortController();
+  consume();
+  const ctl=new AbortController(); abortCtl=ctl;
+  const card=document.createElement('div'); card.className='card current';
+  card.innerHTML='<div class="tags"></div><div class="q"></div><div class="ans"></div>';
+  card.querySelector('.q').textContent=text;
+  let attached=false, raw='';
+  const attach=()=>{ if(attached) return; attached=true; showCard(card); liveMsg(''); };
+  liveMsg('A preparar a resposta…','busy');
   try{
-    let raw='';
-    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, abortCtl.signal, d=>{ raw+=d; paint(card,raw,false); });
+    await streamFn(key, buildSystem(prov==='groq'?12000:20000), text, ctl.signal, d=>{
+      raw+=d; const res=paint(card,raw,false);
+      if(res && res.type && res.type!=='nao') attach();
+    });
     const res=paint(card,raw,true);
-    if(res && res.type!=='nao'){ qaLog.push({q:res.q||text, a:res.main.slice(0,500)}); if(qaLog.length>4) qaLog.shift(); }
-    if(!voiceActive() && $('holdAfter').checked && card.dataset.type!=='nao') setHold(true);
-  }catch(err){ if(err.name!=='AbortError') card.querySelector('.ans').textContent='Erro: '+err.message; }
+    if(!res || res.type==='nao'){ if(abortCtl===ctl) liveMsg('Fala do entrevistador sem pergunta — mantive a resposta anterior.'); return; }
+    attach();
+    qaLog.push({q:res.q||text, a:res.main.slice(0,500)}); if(qaLog.length>4) qaLog.shift();
+    if(!voiceActive() && $('holdAfter').checked) setHold(true);
+  }catch(err){
+    if(err.name==='AbortError'){ if(attached) card.classList.add('cut'); return; }
+    alertBanner('Não consegui gerar a resposta: '+err.message);
+  }finally{ if(abortCtl===ctl){ abortCtl=null; if(!$('liveMsg').hidden && $('liveMsg').classList.contains('busy')) liveMsg(''); } }
 }
 async function readSSE(r,onData){
   const rd=r.body.getReader(), dec=new TextDecoder(); let buf='';
@@ -974,7 +1098,7 @@ async function streamGroq(key,system,user,signal,onDelta){
   for(const model of order){
     const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal,
       headers:{'content-type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model,max_tokens:900,temperature:0.75,stream:true,
+      body:JSON.stringify({model,max_tokens:600,temperature:0.7,stream:true,
         messages:[{role:'system',content:system},{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
     if(r.status===401) throw new Error('Chave Groq inválida. Confirme em Ajustes (começa por gsk_).');
     if(r.status===429){ lastErr=new Error('Limite gratuito do Groq atingido por agora. Espere cerca de um minuto, ou escolha outro modelo em Ajustes.'); continue; }
@@ -992,7 +1116,7 @@ async function streamGroq(key,system,user,signal,onDelta){
 async function streamClaude(key,system,user,signal,onDelta){
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,
     headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:$('model').value,max_tokens:700,stream:true,system,messages:[{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
+    body:JSON.stringify({model:$('model').value,max_tokens:600,stream:true,system,messages:[{role:'user',content:'Transcrição do entrevistador:\n"""'+user+'"""'}]})});
   if(r.status===401) throw new Error('Chave Anthropic inválida. Confirme em Ajustes (começa por sk-ant-).');
   if(!r.ok) throw await errorOf(r);
   await readSSE(r,ev=>{ if(ev.type==='error') throw new Error(ev.error?.message); if(ev.type==='content_block_delta'&&ev.delta?.text) onDelta(ev.delta.text); });
@@ -1031,7 +1155,9 @@ ESTILO — o mais importante
 - Para perguntas comportamentais, segue a lógica situação → ação → resultado, mas sem a anunciar.
 - Tamanho: SOCIAL 5 a 25 palavras; PESSOAL e PROFISSIONAL 50 a 110 palavras (30 a 45 segundos a falar); só com pedido de profundidade técnica até 150. Sem listas nem negrito na resposta.
 - Depois das respostas PESSOAL e PROFISSIONAL, numa linha à parte: "Lembretes: " seguido de 2 ou 3 palavras-chave curtas separadas por " · " (para eu olhar de relance). Nas respostas SOCIAL não há lembretes.
-- Se o texto NÃO for uma pergunta ou pedido ao candidato (comentários do entrevistador para si próprio, ruído, frase cortada sem sentido), responde apenas a primeira linha com TIPO: nao. Cumprimentos e formalidades dirigidos ao candidato NÃO são "nao" — são SOCIAL.
+- Responde "TIPO: nao" (só a primeira linha, mais nada) quando o entrevistador NÃO está a pedir nada ao candidato: afirmações, concordâncias, elogios ou comentários sobre a resposta anterior ("Great, that makes sense.", "I agree.", "Interessante, nós também usamos isso.", "Perfeito, obrigado."), explicações sobre a empresa ou a vaga, ruído ou frases cortadas sem sentido.
+- Se houver uma afirmação seguida de uma pergunta, responde só à pergunta.
+- Cumprimentos e formalidades dirigidos ao candidato ("How are you?", "Tudo bem?") NÃO são "nao" — são SOCIAL.
 
 FORMATO OBRIGATÓRIO — primeira linha exatamente:
 TIPO: social | pessoal | profissional | nao ; IDIOMA: ${$('lang').value} ; PERGUNTA: <pergunta reformulada de forma limpa>
@@ -1069,18 +1195,13 @@ ${v('pJob').slice(0,cvLimit<20000?4000:10000)}`;
 }
 function archive(card){
   card.classList.remove('current');
-  if(card.dataset.type==='nao'||!card.dataset.type){ card.remove(); return; }
-  const h=$('history'); if(h.querySelector('.hint')) h.innerHTML=''; h.prepend(card);
+  const h=$('history'); h.innerHTML=''; h.appendChild(card);   // só a resposta anterior
 }
-function newCard(q){
-  const c0=$('current'); const prev=c0.querySelector('.card.current'); if(prev) archive(prev);
-  c0.innerHTML='';
-  const c=document.createElement('div'); c.className='card current';
-  c.innerHTML='<div class="tags"></div><div class="q"></div><div class="ans">A pensar…</div>';
-  c.querySelector('.q').textContent=q;
-  c0.appendChild(c);
+function showCard(card){
+  const c0=$('current'); const prev=c0.querySelector('.card.current');
+  if(prev) archive(prev);
+  c0.innerHTML=''; c0.appendChild(card);
   if(view!=='live') go('live');
-  return c;
 }
 function paint(card,raw,final){
   const nl=raw.indexOf('\n'); if(nl<0 && !final) return null;
@@ -1089,7 +1210,7 @@ function paint(card,raw,final){
   const lang=(head.match(/IDIOMA:\s*([\w-]+)/i)||[])[1]||'';
   const q=((head.match(/PERGUNTA:\s*(.+)$/i)||[])[1]||'').trim();
   card.dataset.type=type.startsWith('n')?'nao':type;
-  if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si. A continuar a ouvir.'; card.style.opacity=.6; return {type:'nao'}; }
+  if(card.dataset.type==='nao') return {type:'nao'};
   const tags=card.querySelector('.tags'); tags.innerHTML='';
   if(type){ const t=document.createElement('span');
     const k=type.startsWith('prof')?['pro','Profissional · CV']:type.startsWith('soc')?['soc','Conversa']:['pes','Pessoal · Perfil'];
