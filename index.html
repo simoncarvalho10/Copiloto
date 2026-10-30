@@ -218,6 +218,10 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
       <div class="headrow">
         <h2>Transcrição</h2>
         <span class="chip" id="voiceLast" hidden></span>
+        <select id="langQuick" aria-label="Idioma da entrevista" style="width:auto;min-height:34px;padding:4px 8px;font-size:.85rem;margin-left:auto">
+          <option value="en-US">EN · US</option><option value="en-GB">EN · UK</option><option value="en-IN">EN · IN</option><option value="en-AU">EN · AU</option>
+          <option value="pt-BR">PT · BR</option><option value="pt-PT">PT · PT</option>
+        </select>
         <button class="ghost" id="btnClear" style="min-height:34px;padding:4px 12px;font-size:.82rem">Limpar</button>
       </div>
       <div id="transcript" aria-live="polite"><span class="hint">Toque em "Começar a ouvir" e deixe o entrevistador falar.</span></div>
@@ -351,25 +355,23 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
     </section>
 
     <section class="panel">
-      <h2>Transcrição</h2>
+      <h2>Transcrição e idioma</h2>
+      <label for="lang">Idioma da entrevista</label>
+      <select id="lang">
+        <option value="en-US" selected>English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="en-AU">English (Australia)</option>
+        <option value="pt-BR">Português (Brasil)</option>
+        <option value="pt-PT">Português (Portugal)</option>
+      </select>
+      <p class="hint">A transcrição e as respostas sugeridas usam este idioma. O app abre sempre em English (US); para mudar, escolha aqui ou no seletor ao lado de "Transcrição", no ecrã Entrevista.</p>
       <label for="engine">Motor de transcrição</label>
       <select id="engine">
         <option value="browser">Navegador (grátis, sem chave)</option>
-        <option value="whisper-groq">Whisper — Groq (grátis, deteta idioma e sotaque)</option>
+        <option value="whisper-groq">Whisper — Groq (grátis, melhor com sotaques)</option>
         <option value="whisper-openai">Whisper — OpenAI (pago)</option>
       </select>
-      <div id="langBox">
-        <label for="lang">Idioma e sotaque esperado</label>
-        <select id="lang">
-          <option value="pt-BR">Português (Brasil)</option>
-          <option value="pt-PT">Português (Portugal)</option>
-          <option value="en-US">English (US)</option>
-          <option value="en-GB">English (UK)</option>
-          <option value="en-IN">English (India)</option>
-          <option value="en-AU">English (Australia)</option>
-        </select>
-        <p class="hint">O motor Navegador ouve um idioma de cada vez. Para misturar PT e EN, use o Whisper.</p>
-      </div>
       <div id="openaiBox" hidden>
         <label for="openaiKey">Chave API OpenAI</label><input type="password" id="openaiKey" placeholder="sk-..." autocomplete="off">
       </div>
@@ -420,7 +422,7 @@ matchMedia('(min-width:900px)').addEventListener('change',()=>go(view));
 
 /* ---------- Gravação automática ---------- */
 const STORE_KEY='copiloto-entrevista-v2';
-const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','lang','provider','groqModel','model','pause','micSel','voiceSens'];
+const FIELDS = ['cvText','pName','pBasics','pAbout','pGoals','pStrengths','pPersonal','pPractical','pJob','engine','provider','groqModel','model','pause','micSel','voiceSens'];
 const SECRET = ['openaiKey','claudeKey','groqKey'];
 const CHECKS = ['holdAfter','saveKeys','wake','voiceOn'];
 let saveTimer=null, pendingMic='', ansSize=1.15;
@@ -610,7 +612,6 @@ function syncEngine(){
   if(!$('provider').value) $('provider').value='groq';
   if(!$('groqModel').value) $('groqModel').selectedIndex=0;   // modelo guardado já não existe
   const eng=$('engine').value, prov=$('provider').value;
-  $('langBox').hidden = eng!=='browser';
   $('openaiBox').hidden = eng!=='whisper-openai';
   $('groqBox').hidden = !(eng==='whisper-groq' || prov==='groq');
   $('groqModelBox').hidden = prov!=='groq';
@@ -619,7 +620,9 @@ function syncEngine(){
 }
 $('provider').addEventListener('change',syncEngine);
 $('engine').addEventListener('change',()=>{ syncEngine(); if(listening){ stopListening(); startListening(); } });
-$('lang').addEventListener('change',()=>{ if(listening && recog){ recog.stop(); } });
+function setLang(v){ $('lang').value=v; $('langQuick').value=v; if(listening && recog){ recog.stop(); } }
+$('lang').addEventListener('change',()=>setLang($('lang').value));
+$('langQuick').addEventListener('change',()=>setLang($('langQuick').value));
 const fmtPause=()=> $('pauseVal').textContent=Number($('pause').value).toFixed(1).replace('.',',')+' s';
 $('pause').addEventListener('input',fmtPause);
 
@@ -848,7 +851,9 @@ async function handleSegment(chunks,mime,frames,provWho){
   interimText='(a transcrever…)'; renderTranscript();
   const m=mime||''; const ext=m.includes('mp4')?'mp4':m.includes('ogg')?'ogg':'webm';
   const fd=new FormData(); fd.append('file',blob,'audio.'+ext); fd.append('model',groq?'whisper-large-v3-turbo':'whisper-1');
-  fd.append('prompt','Entrevista de emprego / job interview. Português e English.');
+  const lg=$('lang').value.slice(0,2);
+  fd.append('language',lg);
+  fd.append('prompt',lg==='pt'?'Entrevista de emprego.':'Job interview.');
   try{
     const r=await fetch(groq?'https://api.groq.com/openai/v1/audio/transcriptions':'https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+key},body:fd});
     if(r.status===429){ interimText=''; renderTranscript(); alertBanner('Limite gratuito atingido por agora. Espere um minuto.'); return; }
@@ -961,13 +966,17 @@ async function streamClaude(key,system,user,signal,onDelta){
   if(!r.ok) throw await errorOf(r);
   await readSSE(r,ev=>{ if(ev.type==='error') throw new Error(ev.error?.message); if(ev.type==='content_block_delta'&&ev.delta?.text) onDelta(ev.delta.text); });
 }
+function langName(){
+  return {'en-US':'inglês dos Estados Unidos (American English)','en-GB':'inglês britânico (British English)','en-IN':'inglês (Indian English, claro e neutro)',
+    'en-AU':'inglês australiano (Australian English)','pt-BR':'português do Brasil','pt-PT':'português europeu (de Portugal)'}[$('lang').value]||'inglês dos Estados Unidos';
+}
 function buildSystem(cvLimit=20000){
   const v=id=>$(id).value.trim()||'(não informado)';
   const hist=qaLog.length? qaLog.map((x,i)=>`P${i+1}: ${x.q}\nResposta sugerida: ${x.a}`).join('\n\n') : '(início da entrevista)';
   return `És um copiloto discreto numa ENTREVISTA DE EMPREGO. Recebes a fala do entrevistador (transcrita automaticamente; pode ter erros e sotaques variados — interpreta a intenção) e sugeres o que o CANDIDATO pode dizer, na primeira pessoa, como se fosse ele a falar naquele momento.
 
 CONTEÚDO
-- Responde SEMPRE no idioma da pergunta (português ou inglês). Em português, usa a variante da pergunta (Brasil ou Portugal) com expressões naturais dessa variante.
+- IDIOMA DA RESPOSTA: ${langName()}. Responde SEMPRE nesse idioma e nessa variante, com expressões naturais dela, mesmo que a pergunta transcrita venha noutro idioma ou misturada. A pergunta reformulada da primeira linha também fica nesse idioma.
 - Há três tipos de pergunta:
   • SOCIAL — formalidades e conversa de circunstância dirigidas ao candidato ("Como está?", "Tudo bem?", "Quantos anos tem?", "Onde mora?", "Conseguiu encontrar-nos bem?", "Está a ouvir-me bem?"). Resposta curta e direta, simpática e profissional sem ser formal: 1 ou 2 frases, 5 a 25 palavras. Responde ao que foi perguntado e, se fizer sentido, devolve a cortesia ("E você?"). Nada de discursos, nada de falar do currículo. Dados como idade ou cidade vêm de "Dados básicos" do PERFIL; se faltarem, usa [colchetes].
   • PESSOAL — personalidade, valores, hobbies, objetivos, pontos fortes e fracos, salário, disponibilidade: os factos vêm do PERFIL PESSOAL.
@@ -991,7 +1000,7 @@ ESTILO — o mais importante
 - Se o texto NÃO for uma pergunta ou pedido ao candidato (comentários do entrevistador para si próprio, ruído, frase cortada sem sentido), responde apenas a primeira linha com TIPO: nao. Cumprimentos e formalidades dirigidos ao candidato NÃO são "nao" — são SOCIAL.
 
 FORMATO OBRIGATÓRIO — primeira linha exatamente:
-TIPO: social | pessoal | profissional | nao ; IDIOMA: pt | en ; PERGUNTA: <pergunta reformulada de forma limpa>
+TIPO: social | pessoal | profissional | nao ; IDIOMA: ${$('lang').value} ; PERGUNTA: <pergunta reformulada de forma limpa>
 Depois uma linha em branco, a resposta e, se aplicável, a linha "Lembretes:".
 
 === CONVERSA ATÉ AGORA ===
@@ -1031,7 +1040,7 @@ function paint(card,raw,final){
   const nl=raw.indexOf('\n'); if(nl<0 && !final) return null;
   const head=nl<0?raw:raw.slice(0,nl), body=nl<0?'':raw.slice(nl+1).trim();
   const type=((head.match(/TIPO:\s*(\w+)/i)||[])[1]||'').toLowerCase();
-  const lang=(head.match(/IDIOMA:\s*(\w+)/i)||[])[1]||'';
+  const lang=(head.match(/IDIOMA:\s*([\w-]+)/i)||[])[1]||'';
   const q=((head.match(/PERGUNTA:\s*(.+)$/i)||[])[1]||'').trim();
   card.dataset.type=type.startsWith('n')?'nao':type;
   if(card.dataset.type==='nao'){ card.querySelector('.ans').textContent='Não parece ser uma pergunta para si. A continuar a ouvir.'; card.style.opacity=.6; return {type:'nao'}; }
@@ -1050,7 +1059,7 @@ function paint(card,raw,final){
 }
 
 /* ---------- Arranque ---------- */
-syncEngine(); fmtPause(); cvDropState(); voiceUI(); checkMicPermission(); readiness();
+setLang('en-US'); syncEngine(); fmtPause(); cvDropState(); voiceUI(); checkMicPermission(); readiness();
 let startView='live'; try{ startView=sessionStorage.getItem('copiloto-view')||'live'; }catch(e){}
 go(startView);
 </script>
